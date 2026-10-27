@@ -37,9 +37,11 @@ student_expense_price_versions
 student_expenses
 student_expense_payments
 institute_expense_categories
+institute_expense_types
 institute_expense_price_versions
 institute_expenses
 institute_expense_payments
 payment_methods
 financial_accounts
 account_transfers
+refunds
