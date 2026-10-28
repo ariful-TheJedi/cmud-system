@@ -1,6 +1,9 @@
 ﻿
-3 core foundations
+database
 ====================
+
+3 core foundations(table list)
+-------------------------------
 
 1. Institute & Branches 
 institutes
@@ -45,3 +48,83 @@ payment_methods
 financial_accounts
 account_transfers
 refunds
+
+User Management & Access Control
+---------------------------------
+
+Direct user permissions are used; roles are not part of the active access design.
+
+1. users
+- id BIGINT PRIMARY KEY, auto-generated
+- name VARCHAR(255) NOT NULL
+- email VARCHAR(255) NOT NULL UNIQUE (store lowercase)
+- phone VARCHAR(30) NULL
+- designation VARCHAR(100) NULL (descriptive only; does not grant access)
+- password VARCHAR(255) NOT NULL (hashed)
+- email_verified_at TIMESTAMP NULL
+- is_active BOOLEAN NOT NULL DEFAULT TRUE
+- is_super_admin BOOLEAN NOT NULL DEFAULT FALSE
+- remember_token VARCHAR(100) NULL
+- created_at TIMESTAMP NOT NULL
+- updated_at TIMESTAMP NOT NULL
+
+2. permissions
+- id BIGINT PRIMARY KEY, auto-generated
+- name VARCHAR(255) NOT NULL
+- guard_name VARCHAR(255) NOT NULL
+- label VARCHAR(150) NOT NULL
+- module VARCHAR(100) NOT NULL
+- description TEXT NULL
+- created_at TIMESTAMP NOT NULL
+- updated_at TIMESTAMP NOT NULL
+- UNIQUE (name, guard_name)
+- label, module, and description are custom additions to Spatie's standard fields.
+
+3. model_has_permissions
+- permission_id BIGINT NOT NULL, FOREIGN KEY to permissions.id (cascade on delete)
+- model_type VARCHAR(255) NOT NULL
+- model_id BIGINT NOT NULL
+- PRIMARY KEY (permission_id, model_id, model_type)
+- INDEX (model_id, model_type)
+- model_type/model_id identify the receiving User model polymorphically; there is no direct users foreign key.
+- No separate id or timestamps.
+
+4. sessions
+- id VARCHAR(255) PRIMARY KEY
+- user_id BIGINT NULL, indexed (no user foreign key)
+- ip_address VARCHAR(45) NULL
+- user_agent TEXT NULL
+- payload TEXT NOT NULL
+- last_activity INTEGER NOT NULL, indexed
+
+5. password_reset_tokens
+- email VARCHAR(255) PRIMARY KEY
+- token VARCHAR(255) NOT NULL
+- created_at TIMESTAMP NULL
+- One reset record per email; no id or user foreign key.
+
+6. audit_logs
+- id BIGINT PRIMARY KEY, auto-generated
+- actor_user_id BIGINT NULL, FOREIGN KEY to users.id (restrict on delete)
+- action VARCHAR(100) NOT NULL
+- description TEXT NOT NULL
+- subject_type VARCHAR(255) NULL
+- subject_id BIGINT NULL
+- old_values JSONB NULL
+- new_values JSONB NULL
+- ip_address VARCHAR(45) NULL
+- user_agent TEXT NULL
+- created_at TIMESTAMP NOT NULL
+- INDEX (actor_user_id, created_at)
+- INDEX (subject_type, subject_id)
+- INDEX (action, created_at)
+- subject_type and subject_id must both be present or both NULL.
+- Append-only; no updated_at. Never log passwords, reset tokens, remember tokens, or session payloads.
+
+These are the six actively used tables. Spatie's standard installation may also create roles, model_has_roles, and role_has_permissions; those tables remain unused.
+Relationships
+-------------
+- users and permissions have a many-to-many relationship through model_has_permissions. Each row assigns one permission to one user. model_type/model_id identify the User polymorphically; this is not a direct foreign key to users.
+- A user can have zero or many sessions. Each session can belong to zero or one user; user_id may be NULL for guest sessions. This is a logical relationship, with no user foreign key in Laravel's standard sessions table.
+- A user can have zero or one password reset record matched by email, and a reset record may match zero or one current user. The match is by email, not a user_id foreign key; an email change can leave a reset record unmatched.
+- A user can be the actor for zero or many audit log entries. Each audit log entry has zero or one actor; actor_user_id is nullable for automated system actions.
