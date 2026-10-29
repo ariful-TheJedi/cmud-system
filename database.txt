@@ -6,14 +6,135 @@ database
 -------------------------------
 
 1. Institute & Branches 
+
 institutes
+| Column | Purpose |
+|---|---|
+| **`id` — PK** | Unique institute ID |
+| `code` | Institute code |
+| `name` | Institute name |
+| `phone` | Main contact number |
+| `email` | Official email address |
+| `website` | Website address, optional |
+| `address` | Main office address |
+| `logo_path` | Logo file location, optional |
+| `is_active` | Whether the institute is active |
+| `created_at` | Record creation time |
+| `updated_at` | Last update time |
+
+
 branches
+| Column | Purpose |
+|---|---|
+| **`id` — PK** | Unique branch ID |
+| `institute_id` | Institute this branch belongs to |
+| `code` | Branch code |
+| `name` | Branch name |
+| `phone` | Branch contact number |
+| `email` | Branch email address, optional |
+| `address` | Branch address |
+| `is_active` | Whether the branch is active |
+| `created_at` | Record creation time |
+| `updated_at` | Last update time |
+
 departments
+| Column | Purpose |
+|---|---|
+| **`id` — PK** | Unique department ID |
+| `institute_id` | Institute this department belongs to |
+| `code` | Department code |
+| `name` | Department name |
+| `description` | Department responsibilities, optional |
+| `is_active` | Whether the department is active |
+| `created_at` | Record creation time |
+| `updated_at` | Last update time |
+
+
 rooms
+| Column | Purpose |
+|---|---|
+| **`id` — PK** | Unique department ID |
+| `institute_id` | Institute this department belongs to |
+| `code` | Department code |
+| `name` | Department name |
+| `description` | Department responsibilities, optional |
+| `is_active` | Whether the department is active |
+| `created_at` | Record creation time |
+| `updated_at` | Last update time |
+
+
 staff
+| Column | Purpose |
+|---|---|
+| **`id` — PK** | Unique room ID |
+| `branch_id` | Branch containing the room |
+| `code` | Room number or code |
+| `name` | Room name |
+| `room_type` | Classroom, laboratory, office, etc. |
+| `floor` | Floor name or number, optional |
+| `capacity` | Number of people the room accommodates, optional |
+| `description` | Additional room details, optional |
+| `is_active` | Whether the room is available for use |
+| `created_at` | Record creation time |
+| `updated_at` | Last update time |
+
 staff_assignments
+| Column | Purpose |
+|---|---|
+| **`id` — PK** | Unique room ID |
+| `branch_id` | Branch containing the room |
+| `code` | Room number or code |
+| `name` | Room name |
+| `room_type` | Classroom, laboratory, office, etc. |
+| `floor` | Floor name or number, optional |
+| `capacity` | Number of people the room accommodates, optional |
+| `description` | Additional room details, optional |
+| `is_active` | Whether the room is available for use |
+| `created_at` | Record creation time |
+| `updated_at` | Last update time |
+
 asset_categories
+| Column | Purpose |
+|---|---|
+| **`id` — PK** | Unique staff ID |
+| `institute_id` | Institute employing the staff member |
+| `staff_code` | Employee identification code |
+| `full_name` | Staff member’s full name |
+| `phone` | Contact number |
+| `email` | Email address, optional |
+| `address` | Address, optional |
+| `date_of_birth` | Date of birth, optional |
+| `photo_path` | Staff photo location, optional |
+| `designation` | Job title |
+| `joining_date` | Employment start date |
+| `leaving_date` | Employment end date, optional |
+| `employment_status` | Active, on leave, resigned, terminated, etc. |
+| `notes` | Additional employment information, optional |
+| `created_at` | Record creation time |
+| `updated_at` | Last update time |
+
 assets
+| Column | Purpose |
+|---|---|
+| **`id` — PK** | Unique asset ID |
+| `asset_category_id` | Asset category |
+| `branch_id` | Branch currently holding the asset |
+| `room_id` | Current room, optional |
+| `asset_code` | Internal asset identification code |
+| `name` | Asset name |
+| `brand` | Manufacturer or brand, optional |
+| `model` | Model name or number, optional |
+| `serial_number` | Manufacturer’s serial number, optional |
+| `purchase_date` | Purchase date, optional |
+| `purchase_cost` | Original purchase cost, optional |
+| `warranty_expires_on` | Warranty expiry date, optional |
+| `condition` | Good, fair, damaged, etc. |
+| `status` | In use, in storage, under maintenance, disposed, etc. |
+| `notes` | Additional asset details, optional |
+| `created_at` | Record creation time |
+| `updated_at` | Last update time |
+
+
 
 2. Students & Academy
 students
