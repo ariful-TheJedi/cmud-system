@@ -1,0 +1,602 @@
+CMUD DATABASE TABLE LIST
+========================
+
+Table names defined by the Laravel migrations in this project. This is the schema list from migration files, not a live database inspection.
+
+Institute & Branches
+=======================
+
+1. institutes
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- None.
+Relationships from this table:
+- `branches.institute_id` -> `institutes.id` (1:N).
+- `departments.institute_id` -> `institutes.id` (1:N).
+- `staff.institute_id` -> `institutes.id` (1:N).
+- `asset_categories.institute_id` -> `institutes.id` (1:N).
+- `students.institute_id` -> `institutes.id` (1:N).
+- `courses.institute_id` -> `institutes.id` (1:N).
+- `certificate_templates.institute_id` -> `institutes.id` (1:N).
+- `communication_groups.institute_id` -> `institutes.id` (1:N).
+- `teachers.institute_id` -> `institutes.id` (1:N).
+- `student_expense_types.institute_id` -> `institutes.id` (1:N).
+- `institute_expense_categories.institute_id` -> `institutes.id` (1:N).
+- `institute_expenses.institute_id` -> `institutes.id` (1:N).
+- `payment_methods.institute_id` -> `institutes.id` (1:N).
+- `financial_accounts.institute_id` -> `institutes.id` (1:N).
+
+
+
+2. branches
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `institute_id` -> `institutes.id`.
+Relationships from this table:
+- `rooms.branch_id` -> `branches.id` (1:N).
+- `staff_assignments.branch_id` -> `branches.id` (1:N).
+- `assets.branch_id` -> `branches.id` (1:N).
+- `students.admission_branch_id` -> `branches.id` (1:N).
+- `batches.branch_id` -> `branches.id` (1:N).
+- `enrollments.branch_id` -> `branches.id` (1:N).
+- `communication_groups.branch_id` -> `branches.id` (1:N; optional).
+- `student_expense_price_versions.branch_id` -> `branches.id` (1:N; optional).
+- `student_expenses.branch_id` -> `branches.id` (1:N).
+- `institute_expense_price_versions.branch_id` -> `branches.id` (1:N; optional).
+- `institute_expenses.branch_id` -> `branches.id` (1:N; optional).
+- `financial_accounts.branch_id` -> `branches.id` (1:N; optional).
+- `stocks.branch_id` -> `branches.id` (1:N).
+
+
+
+
+3. departments
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `institute_id` -> `institutes.id`.
+Relationships from this table:
+- `staff_assignments.department_id` -> `departments.id` (1:N).
+- `institute_expenses.department_id` -> `departments.id` (1:N; optional).
+
+
+
+4. rooms
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `branch_id` -> `branches.id`.
+Relationships from this table:
+- `assets.room_id` -> `rooms.id` (1:N; optional).
+
+
+
+5. staff
+
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `institute_id` -> `institutes.id`.
+Relationships from this table:
+- `staff_assignments.staff_id` -> `staff.id` (1:N).
+- `teachers.staff_id` -> `staff.id` (1:N; optional).
+- `institute_expenses.staff_id` -> `staff.id` (1:N; optional).
+
+
+
+
+
+6. staff_assignments
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `staff_id` -> `staff.id`.
+- `branch_id` -> `branches.id`.
+- `department_id` -> `departments.id`.
+Relationships from this table:
+- No other table references this table in the current schema.
+
+
+
+
+
+7. asset_categories
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `institute_id` -> `institutes.id`.
+Relationships from this table:
+- `assets.asset_category_id` -> `asset_categories.id` (1:N).
+
+
+
+
+8. assets
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `asset_category_id` -> `asset_categories.id`.
+- `branch_id` -> `branches.id`.
+- `room_id` -> `rooms.id` (nullable; optional).
+Relationships from this table:
+- `institute_expenses.asset_id` -> `assets.id` (1:N; optional).
+
+
+
+
+9. stocks
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `branch_id` -> `branches.id`.
+Relationships from this table:
+- `stock_movements.stock_id` -> `stocks.id` (1:N).
+
+
+
+
+10. stock_movements
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `stock_id` -> `stocks.id`.
+Relationships from this table:
+- No other table references this table in the current schema.
+
+
+
+
+Students & Academy 
+====================
+
+11. students
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `institute_id` -> `institutes.id`.
+- `admission_branch_id` -> `branches.id`.
+- `medical_college_id` -> `medical_colleges.id` (nullable; optional).
+Relationships from this table:
+- `enrollments.student_id` -> `students.id` (1:N).
+- `student_group_memberships.student_id` -> `students.id` (1:N).
+- `student_expenses.student_id` -> `students.id` (1:N).
+
+
+
+
+12. medical_colleges
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- None.
+Relationships from this table:
+- `students.medical_college_id` -> `medical_colleges.id` (1:N; optional).
+
+
+
+
+13. courses
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `institute_id` -> `institutes.id`.
+Relationships from this table:
+- `course_stages.course_id` -> `courses.id` (1:N).
+- `batches.course_id` -> `courses.id` (1:N).
+- `enrollments.course_id` -> `courses.id` (1:N).
+- `certificate_templates.course_id` -> `courses.id` (1:N; optional).
+- `communication_groups.course_id` -> `courses.id` (1:N; optional).
+- `course_teacher.course_id` -> `courses.id` (1:N).
+- `student_expense_price_versions.course_id` -> `courses.id` (1:N; optional).
+
+
+
+
+
+14. course_stages
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `course_id` -> `courses.id`.
+Relationships from this table:
+- `student_stage_records.course_stage_id` -> `course_stages.id` (1:N).
+- `student_expense_price_versions.course_stage_id` -> `course_stages.id` (1:N; optional).
+
+
+
+
+15. batches
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `course_id` -> `courses.id`.
+- `branch_id` -> `branches.id`.
+Relationships from this table:
+- `enrollments.batch_id` -> `batches.id` (1:N; optional).
+- `student_stage_records.batch_id` -> `batches.id` (1:N).
+- `communication_groups.batch_id` -> `batches.id` (1:N; optional).
+
+
+
+16. enrollments
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `student_id` -> `students.id`.
+- `course_id` -> `courses.id`.
+- `branch_id` -> `branches.id`.
+- `batch_id` -> `batches.id` (nullable; optional).
+Relationships from this table:
+- `student_stage_records.enrollment_id` -> `enrollments.id` (1:N).
+- `certificates.enrollment_id` -> `enrollments.id` (1:N).
+- `student_tuitions.enrollment_id` -> `enrollments.id` (1:1; UNIQUE 1:1).
+- `student_expenses.enrollment_id` -> `enrollments.id` (1:N; optional).
+
+
+
+17. student_stage_records
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `enrollment_id` -> `enrollments.id`.
+- `course_stage_id` -> `course_stages.id`.
+- `batch_id` -> `batches.id`.
+Relationships from this table:
+- `exam_records.student_stage_record_id` -> `student_stage_records.id` (1:N).
+- `student_expenses.student_stage_record_id` -> `student_stage_records.id` (1:N; optional).
+
+
+
+18. exam_records
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `student_stage_record_id` -> `student_stage_records.id`.
+Relationships from this table:
+- No other table references this table in the current schema.
+
+
+
+19. certificate_templates
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `institute_id` -> `institutes.id`.
+- `course_id` -> `courses.id` (nullable; optional).
+Relationships from this table:
+- `certificates.certificate_template_id` -> `certificate_templates.id` (1:N).
+
+
+
+
+
+20. certificates
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `enrollment_id` -> `enrollments.id`.
+- `certificate_template_id` -> `certificate_templates.id`.
+Relationships from this table:
+- No other table references this table in the current schema.
+
+
+
+
+21. communication_groups
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `institute_id` -> `institutes.id`.
+- `branch_id` -> `branches.id` (nullable; optional).
+- `course_id` -> `courses.id` (nullable; optional).
+- `batch_id` -> `batches.id` (nullable; optional).
+Relationships from this table:
+- `student_group_memberships.communication_group_id` -> `communication_groups.id` (1:N).
+
+
+
+
+
+22. student_group_memberships
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `student_id` -> `students.id`.
+- `communication_group_id` -> `communication_groups.id`.
+Relationships from this table:
+- No other table references this table in the current schema.
+
+
+
+
+23. teachers
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `institute_id` -> `institutes.id`.
+- `staff_id` -> `staff.id` (nullable; optional).
+Relationships from this table:
+- `course_teacher.teacher_id` -> `teachers.id` (1:N).
+- `institute_expenses.teacher_id` -> `teachers.id` (1:N; optional).
+
+
+
+24. course_teacher
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `course_id` -> `courses.id`.
+- `teacher_id` -> `teachers.id`.
+Relationships from this table:
+- No other table references this table in the current schema.
+
+
+
+Finance
+=============
+
+25. student_tuitions
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `enrollment_id` -> `enrollments.id` (UNIQUE 1:1).
+- `waiver_approved_by` -> `users.id` (nullable FK; deletion is restricted while referenced).
+Relationships from this table:
+- `student_tuition_payments.student_tuition_id` -> `student_tuitions.id` (1:N).
+
+
+
+
+
+26. student_tuition_payments
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `student_tuition_id` -> `student_tuitions.id`.
+- `payment_method_id` -> `payment_methods.id`.
+- `financial_account_id` -> `financial_accounts.id`.
+- `verified_by` -> `users.id` (nullable FK; deletion is restricted while referenced).
+- `recorded_by` -> `users.id` (required FK; deletion is restricted while referenced).
+Relationships from this table:
+- No other table references this table in the current schema.
+
+
+
+
+27. student_expense_types
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `institute_id` -> `institutes.id`.
+Relationships from this table:
+- `student_expense_price_versions.student_expense_type_id` -> `student_expense_types.id` (1:N).
+- `student_expenses.student_expense_type_id` -> `student_expense_types.id` (1:N).
+
+
+
+
+28. student_expense_price_versions
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `student_expense_type_id` -> `student_expense_types.id`.
+- `branch_id` -> `branches.id` (nullable; optional).
+- `course_id` -> `courses.id` (nullable; optional).
+- `course_stage_id` -> `course_stages.id` (nullable; optional).
+- `approved_by` -> `users.id` (nullable FK; deletion is restricted while referenced).
+Relationships from this table:
+- `student_expenses.student_expense_price_version_id` -> `student_expense_price_versions.id` (1:N).
+
+
+
+
+29. student_expenses
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `student_id` -> `students.id`.
+- `enrollment_id` -> `enrollments.id` (nullable; optional).
+- `student_stage_record_id` -> `student_stage_records.id` (nullable; optional).
+- `branch_id` -> `branches.id`.
+- `student_expense_type_id` -> `student_expense_types.id`.
+- `student_expense_price_version_id` -> `student_expense_price_versions.id`.
+- `waiver_approved_by` -> `users.id` (nullable FK; deletion is restricted while referenced).
+- `recorded_by` -> `users.id` (required FK; deletion is restricted while referenced).
+Relationships from this table:
+- `student_expense_payments.student_expense_id` -> `student_expenses.id` (1:N).
+
+
+
+
+30. student_expense_payments
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `student_expense_id` -> `student_expenses.id`.
+- `payment_method_id` -> `payment_methods.id`.
+- `financial_account_id` -> `financial_accounts.id`.
+- `verified_by` -> `users.id` (nullable FK; deletion is restricted while referenced).
+- `recorded_by` -> `users.id` (required FK; deletion is restricted while referenced).
+Relationships from this table:
+- No other table references this table in the current schema.
+
+
+
+
+31. institute_expense_categories
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `institute_id` -> `institutes.id`.
+Relationships from this table:
+- `institute_expense_types.institute_expense_category_id` -> `institute_expense_categories.id` (1:N).
+
+
+
+
+32. institute_expense_types
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `institute_expense_category_id` -> `institute_expense_categories.id`.
+Relationships from this table:
+- `institute_expense_price_versions.institute_expense_type_id` -> `institute_expense_types.id` (1:N).
+- `institute_expenses.institute_expense_type_id` -> `institute_expense_types.id` (1:N).
+
+
+
+
+
+33. institute_expense_price_versions
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `institute_expense_type_id` -> `institute_expense_types.id`.
+- `branch_id` -> `branches.id` (nullable; optional).
+- `approved_by` -> `users.id` (nullable FK; deletion is restricted while referenced).
+Relationships from this table:
+- `institute_expenses.institute_expense_price_version_id` -> `institute_expense_price_versions.id` (1:N; optional).
+
+
+
+
+34. institute_expenses
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `institute_id` -> `institutes.id`.
+- `branch_id` -> `branches.id` (nullable; optional).
+- `department_id` -> `departments.id` (nullable; optional).
+- `institute_expense_type_id` -> `institute_expense_types.id`.
+- `institute_expense_price_version_id` -> `institute_expense_price_versions.id` (nullable; optional).
+- `staff_id` -> `staff.id` (nullable; optional).
+- `teacher_id` -> `teachers.id` (nullable; optional).
+- `asset_id` -> `assets.id` (nullable; optional).
+- `approved_by` -> `users.id` (nullable FK; deletion is restricted while referenced).
+- `recorded_by` -> `users.id` (required FK; deletion is restricted while referenced).
+Relationships from this table:
+- `institute_expense_payments.institute_expense_id` -> `institute_expenses.id` (1:N).
+
+
+
+
+
+
+35. institute_expense_payments
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `institute_expense_id` -> `institute_expenses.id`.
+- `payment_method_id` -> `payment_methods.id`.
+- `financial_account_id` -> `financial_accounts.id`.
+- `verified_by` -> `users.id` (nullable FK; deletion is restricted while referenced).
+- `recorded_by` -> `users.id` (required FK; deletion is restricted while referenced).
+Relationships from this table:
+- No other table references this table in the current schema.
+
+
+
+
+
+36. payment_methods
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `institute_id` -> `institutes.id`.
+Relationships from this table:
+- `student_tuition_payments.payment_method_id` -> `payment_methods.id` (1:N).
+- `student_expense_payments.payment_method_id` -> `payment_methods.id` (1:N).
+- `institute_expense_payments.payment_method_id` -> `payment_methods.id` (1:N).
+
+
+
+
+
+37. financial_accounts
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `institute_id` -> `institutes.id`.
+- `branch_id` -> `branches.id` (nullable; optional).
+Relationships from this table:
+- `student_tuition_payments.financial_account_id` -> `financial_accounts.id` (1:N).
+- `student_expense_payments.financial_account_id` -> `financial_accounts.id` (1:N).
+- `institute_expense_payments.financial_account_id` -> `financial_accounts.id` (1:N).
+- `account_transfers.from_financial_account_id` -> `financial_accounts.id` (1:N; outgoing).
+- `account_transfers.to_financial_account_id` -> `financial_accounts.id` (1:N; incoming).
+
+
+
+
+38. account_transfers
+
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `from_financial_account_id` -> `financial_accounts.id` (outgoing).
+- `to_financial_account_id` -> `financial_accounts.id` (incoming).
+- `approved_by` -> `users.id` (nullable FK; deletion is restricted while referenced).
+- `confirmed_by` -> `users.id` (nullable FK; deletion is restricted while referenced).
+- `recorded_by` -> `users.id` (required FK; deletion is restricted while referenced).
+Relationships from this table:
+- No other table references this table in the current schema.
+
+
+
+User Management & Access Control
+================================
+
+39. users
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `permission_group_id` -> `permission_groups.id` (nullable).
+Relationships from this table:
+- Each user belongs to zero or one permission group; each group can have many users.
+- `audit_logs.actor_user_id` -> `users.id` (1:N; optional; restrict on delete).
+- `sessions.user_id` -> `users.id` (1:N; optional; cascade on delete).
+- `password_reset_tokens.email` -> `users.email` (1:N; cascade on delete; reset token is removed when the user is deleted).
+- `student_tuitions.waiver_approved_by` -> `users.id` (1:N; optional; deletion restricted).
+- `student_tuition_payments.verified_by` -> `users.id` (1:N; optional; deletion restricted).
+- `student_tuition_payments.recorded_by` -> `users.id` (1:N; deletion restricted).
+- `student_expense_price_versions.approved_by` -> `users.id` (1:N; optional; deletion restricted).
+- `student_expenses.waiver_approved_by` -> `users.id` (1:N; optional; deletion restricted).
+- `student_expenses.recorded_by` -> `users.id` (1:N; deletion restricted).
+- `student_expense_payments.verified_by` -> `users.id` (1:N; optional; deletion restricted).
+- `student_expense_payments.recorded_by` -> `users.id` (1:N; deletion restricted).
+- `institute_expense_price_versions.approved_by` -> `users.id` (1:N; optional; deletion restricted).
+- `institute_expenses.approved_by` -> `users.id` (1:N; optional; deletion restricted).
+- `institute_expenses.recorded_by` -> `users.id` (1:N; deletion restricted).
+- `institute_expense_payments.verified_by` -> `users.id` (1:N; optional; deletion restricted).
+- `institute_expense_payments.recorded_by` -> `users.id` (1:N; deletion restricted).
+- `account_transfers.approved_by` -> `users.id` (1:N; optional; deletion restricted).
+- `account_transfers.confirmed_by` -> `users.id` (1:N; optional; deletion restricted).
+- `account_transfers.recorded_by` -> `users.id` (1:N; deletion restricted).
+
+
+
+
+40. permission_groups
+Foreign keys and relationships
+Foreign keys stored in this table:
+- None.
+Relationships from this table:
+- `users.permission_group_id` -> `permission_groups.id` (1:N; nullable user membership).
+- `permissions.permission_group_id` -> `permission_groups.id` (1:N; deleting a group is restricted while permissions use it).
+
+
+
+41. permissions
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `permission_group_id` -> `permission_groups.id`.
+Relationships from this table:
+- A permission belongs to exactly one permission group.
+
+
+42. sessions
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `user_id` -> `users.id` (nullable; cascade on delete).
+Relationships from this table:
+- A session may belong to zero or one user through nullable `user_id`; deleting the user deletes their sessions.
+
+
+
+43. password_reset_tokens
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `email` -> `users.email` (cascade on delete).
+Relationships from this table:
+- A reset row belongs to the user identified by its email; deleting the user deletes the reset token.
+
+
+
+44. audit_logs
+Foreign keys and relationships
+Foreign keys stored in this table:
+- `actor_user_id` -> `users.id` (optional; restrict on delete).
+Relationships from this table:
+- Each row has zero or one actor user via nullable `actor_user_id`; deletion is restricted.
