@@ -2,7 +2,7 @@
 
 namespace App\Models\Finance;
 
-use App\Models\InstituteBranch\Institute;
+use App\Models\Institute\Institute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;

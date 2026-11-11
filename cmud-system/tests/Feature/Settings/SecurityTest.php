@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Settings;
 
-use App\Models\User;
+use App\Models\Security\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -35,7 +35,7 @@ class SecurityTest extends TestCase
             
             ->get(route('security.edit'))
             ->assertInertia(fn (Assert $page) => $page
-                ->component('settings/security')
+                ->component('security/settings/security')
                 
                 ->where('canManagePasskeys', true)
                 ->where('passkeys', [])
@@ -79,7 +79,7 @@ class SecurityTest extends TestCase
             ->get(route('security.edit'))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->component('settings/security')
+                ->component('security/settings/security')
                 
                 ->where('canManagePasskeys', false)
                 ->where('passkeys', [])

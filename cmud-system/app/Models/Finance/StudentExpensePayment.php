@@ -2,7 +2,7 @@
 
 namespace App\Models\Finance;
 
-use App\Models\UserAccess\User;
+use App\Models\Security\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 

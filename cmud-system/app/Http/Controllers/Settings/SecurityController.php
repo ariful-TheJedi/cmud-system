@@ -53,7 +53,7 @@ class SecurityController extends Controller
         }
         
 
-        return Inertia::render('settings/security', $props);
+        return Inertia::render('security/settings/security', $props);
     }
 
     /**

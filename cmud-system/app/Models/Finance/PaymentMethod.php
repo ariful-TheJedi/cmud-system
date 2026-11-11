@@ -2,7 +2,7 @@
 
 namespace App\Models\Finance;
 
-use App\Models\InstituteBranch\Institute;
+use App\Models\Institute\Institute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -15,4 +15,5 @@ class PaymentMethod extends Model
     public function studentTuitionPayments(): HasMany { return $this->hasMany(StudentTuitionPayment::class); }
     public function studentExpensePayments(): HasMany { return $this->hasMany(StudentExpensePayment::class); }
     public function instituteExpensePayments(): HasMany { return $this->hasMany(InstituteExpensePayment::class); }
+    public function otherIncomeBillPayments(): HasMany { return $this->hasMany(InstituteOtherIncomeBillPayment::class, 'payment_method_id'); }
 }

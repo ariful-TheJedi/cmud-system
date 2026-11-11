@@ -1,0 +1,25 @@
+1. Separate baseline data from demo data. Use baseline seeders for required lookup or 
+configuration records, such as payment methods, account types, and roles. Keep realistic 
+test scenarios in separate seeders so you can refresh demo data without affecting the app’s 
+baseline setup.
+
+2. Seed in dependency order. Create parent records before records that reference them: 
+institutes and branches, then users and staff, then courses and students, then enrollments, 
+fees, expenses, and payments. Follow the foreign keys in your schema.
+
+3. Use stable identifiers and relationships. Give demo records recognizable names or codes, 
+and connect them consistently. For example, a student should have an enrollment before you 
+seed their tuition or tuition payments.
+
+4. Cover different workflow states. For each module, include a few records that represent 
+common cases: active and inactive, paid and unpaid, pending and verified, waived, overdue, 
+and cancelled where those states exist. Include boundary cases such as optional fields being 
+null and a payment with a verification reference.
+
+5. Make seeders safe to rerun. Use firstOrCreate or updateOrCreate with stable unique keys 
+so repeated seeding doesn’t create duplicate records. Use factories for variable test records,
+but keep key scenarios deterministic.
+
+6. Keep test data separate from production. Have a dedicated demo seeder or local development 
+command, and don’t automatically load demo records in production. Keep credentials for demo 
+users clearly marked as development-only.

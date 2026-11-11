@@ -2,7 +2,7 @@
 
 namespace App\Concerns;
 
-use App\Models\UserAccess\User;
+use App\Models\Security\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Unique;

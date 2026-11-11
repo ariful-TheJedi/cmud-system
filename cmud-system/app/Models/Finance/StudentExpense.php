@@ -2,11 +2,11 @@
 
 namespace App\Models\Finance;
 
-use App\Models\InstituteBranch\Branch;
-use App\Models\StudentsAcademy\Enrollment;
-use App\Models\StudentsAcademy\Student;
-use App\Models\StudentsAcademy\StudentStageRecord;
-use App\Models\UserAccess\User;
+use App\Models\Institute\Branch;
+use App\Models\Academy\Enrollment;
+use App\Models\Academy\Student;
+use App\Models\Academy\StudentStageRecord;
+use App\Models\Security\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class StudentExpense extends Model
 {
     protected $fillable = ['expense_number', 'student_id', 'enrollment_id', 'student_stage_record_id', 'branch_id', 'student_expense_type_id', 'student_expense_price_version_id', 'description', 'quantity', 'unit_amount', 'waiver_amount', 'waiver_reason', 'waiver_approved_by', 'waiver_approved_at', 'issued_on', 'due_on', 'status', 'cancelled_at', 'cancellation_reason', 'recorded_by', 'notes'];
-    protected function casts(): array { return ['quantity' => 'decimal:2', 'unit_amount' => 'decimal:2', 'waiver_amount' => 'decimal:2', 'waiver_approved_at' => 'datetime', 'issued_on' => 'date', 'due_on' => 'date', 'cancelled_at' => 'datetime']; }
+    protected function casts(): array { return ['quantity' => 'decimal:3', 'unit_amount' => 'decimal:2', 'waiver_amount' => 'decimal:2', 'waiver_approved_at' => 'datetime', 'issued_on' => 'date', 'due_on' => 'date', 'cancelled_at' => 'datetime']; }
     public function student(): BelongsTo { return $this->belongsTo(Student::class); }
     public function enrollment(): BelongsTo { return $this->belongsTo(Enrollment::class); }
     public function stageRecord(): BelongsTo { return $this->belongsTo(StudentStageRecord::class, 'student_stage_record_id'); }

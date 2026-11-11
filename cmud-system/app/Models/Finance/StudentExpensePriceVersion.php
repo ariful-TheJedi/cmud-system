@@ -2,10 +2,10 @@
 
 namespace App\Models\Finance;
 
-use App\Models\InstituteBranch\Branch;
-use App\Models\StudentsAcademy\Course;
-use App\Models\StudentsAcademy\CourseStage;
-use App\Models\UserAccess\User;
+use App\Models\Institute\Branch;
+use App\Models\Academy\Course;
+use App\Models\Academy\CourseStage;
+use App\Models\Security\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;

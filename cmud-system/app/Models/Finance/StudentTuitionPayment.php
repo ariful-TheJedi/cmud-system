@@ -2,12 +2,19 @@
 
 namespace App\Models\Finance;
 
-use App\Models\UserAccess\User;
+use App\Models\Security\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class StudentTuitionPayment extends Model
 {
+    use \Illuminate\Database\Eloquent\Factories\HasFactory;
+
+    protected static function newFactory(): \Database\Factories\Finance\StudentTuitionPaymentFactory
+    {
+        return \Database\Factories\Finance\StudentTuitionPaymentFactory::new();
+    }
+
     protected $fillable = ['student_tuition_id', 'payment_number', 'payment_method_id', 'financial_account_id', 'amount', 'paid_at', 'transaction_reference', 'payer_phone', 'proof_file_path', 'status', 'verification_method', 'verified_at', 'verified_by', 'verification_reference', 'verification_response', 'rejection_reason', 'recorded_by', 'notes'];
     protected function casts(): array { return ['amount' => 'decimal:2', 'paid_at' => 'datetime', 'verified_at' => 'datetime', 'verification_response' => 'array']; }
     public function tuition(): BelongsTo { return $this->belongsTo(StudentTuition::class, 'student_tuition_id'); }
