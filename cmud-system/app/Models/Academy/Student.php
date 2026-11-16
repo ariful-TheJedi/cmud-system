@@ -5,17 +5,20 @@ namespace App\Models\Academy;
 use App\Models\Finance\StudentExpense;
 use App\Models\Institute\Branch;
 use App\Models\Institute\Institute;
+use Database\Factories\Academy\StudentFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Student extends Model
 {
-    use \Illuminate\Database\Eloquent\Factories\HasFactory;
+    use HasFactory;
 
-    protected static function newFactory(): \Database\Factories\Academy\StudentFactory
+    protected static function newFactory(): StudentFactory
     {
-        return \Database\Factories\Academy\StudentFactory::new();
+        return StudentFactory::new();
     }
 
     protected $fillable = [
@@ -30,6 +33,7 @@ class Student extends Model
         'gender',
         'phone',
         'alternative_phone',
+        'phone_numbers',
         'email',
         'present_address',
         'permanent_address',
@@ -50,6 +54,7 @@ class Student extends Model
             'date_of_birth' => 'date',
             'graduation_year' => 'integer',
             'documents' => 'array',
+            'phone_numbers' => 'array',
         ];
     }
 
@@ -71,6 +76,11 @@ class Student extends Model
     public function enrollments(): HasMany
     {
         return $this->hasMany(Enrollment::class);
+    }
+
+    public function latestEnrollment(): HasOne
+    {
+        return $this->hasOne(Enrollment::class)->latestOfMany();
     }
 
     public function groupMemberships(): HasMany

@@ -1,6 +1,7 @@
 import { usePage } from '@inertiajs/react';
 import type { ReactNode } from 'react';
 import { SidebarProvider } from '@/components/ui/sidebar';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import type { AppVariant } from '@/types';
 
 type Props = {
@@ -17,5 +18,9 @@ export function AppShell({ children, variant = 'sidebar' }: Props) {
         );
     }
 
-    return <SidebarProvider defaultOpen={isOpen}>{children}</SidebarProvider>;
+    return (
+        <TooltipProvider>
+            <SidebarProvider defaultOpen={isOpen}>{children}</SidebarProvider>
+        </TooltipProvider>
+    );
 }

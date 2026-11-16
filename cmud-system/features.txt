@@ -1,0 +1,83 @@
+1. Institude & Branches
+
+FTR035 — Institute Overview Dashboard
+FTR062 — Reports and CSV Export
+FTR063 — Alerts and Pending Work
+FTR065 — Institute Settings
+
+
+2. Students & Academy
+
+FTR019 — Student Admission
+FTR020 — Student Documents
+FTR021 — Student Profile
+FTR022 — Student Search and Filters
+FTR025 — Student Communication and Follow-up
+FTR026 — Course and Batch Management
+FTR027 — Enrollment Changes
+FTR028 — Class Routines
+FTR029 — Manual Exam Completion
+FTR030 — Certificate Coordination
+FTR031 — Student Requests and Complaints
+FTR032 — Reports, Printing and Export
+FTR033 — Existing Records and Duplicate Checks
+FTR037 — Student Search and Filtering
+FTR038 — Admission and Enrollment Reports
+FTR049 — Course, Batch and Routine Oversight
+FTR050 — Manual Exam-Completion Oversight
+FTR051 — Certificate Rules and Approval
+FTR052 — Certificate Printing and Delivery Oversight
+FTR053 — Certificate Templates and Signatures
+FTR054 — Certificate Exceptions and Corrections
+FTR064 — Student Complaints and Escalations
+
+
+
+3. Finance
+
+FTR001 — Student Bill Generation
+FTR002 — Payment Entry
+FTR003 — Payment Receipts and Vouchers
+FTR004 — Student Record and Payment Search
+FTR005 — Payment Due Calculation
+FTR006 — Find Students by Payment Dues
+FTR007 — Installments and Advance Payments
+FTR008 — Monthly and Yearly Calculations
+FTR009 — Expense Entry and Calculation
+FTR010 — Income and Expense Summary
+FTR011 — Discounts, Waivers and Refunds
+FTR012 — Mistake Correction and Recovery
+FTR013 — CSV Report Generation
+FTR014 — Online Payment Processing
+FTR015 — Payment Method Selection
+FTR016 — Payment Verification and Reconciliation
+FTR017 — Gateway Charges and Settlements
+FTR023 — Find Students by Payment Dues
+FTR024 — View Student Payment Information
+FTR039 — Financial Overview
+FTR040 — Outstanding Dues and Follow-up
+FTR041 — Course and Batch Financial Summary
+FTR042 — Expense Oversight
+FTR043 — Online Payment Overview
+FTR044 — Course Fees and Billing Rules
+FTR045 — Discounts, Waivers and Refunds
+FTR046 — Expense Approval and Limits
+FTR047 — Financial Corrections and Recovery
+FTR061 — Financial Period Closing
+FTR066 — Existing Data and Opening Balances
+
+
+4. Security & User Management
+
+FTR018 — Financial Security and Access
+FTR034 — Access and Change History
+FTR036 — Access to All Department Records
+FTR048 — Central Approval List
+FTR055 — Staff Account Management
+FTR056 — Custom Roles and Permissions
+FTR057 — Delegation of Authority
+FTR058 — Final Authority and Accountability
+FTR059 — Account Security
+FTR060 — Activity and Change History
+FTR067 — Backup and Recovery Oversight
+FTR068 — Archiving and Deletion Control
