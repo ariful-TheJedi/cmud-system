@@ -17,7 +17,7 @@ import {
     X,
     type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 
 type Student = {
     id: number;
@@ -256,13 +256,20 @@ export default function Students() {
     const [loadError, setLoadError] = useState('');
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [appliedSearch, setAppliedSearch] = useState('');
+    const [searchSuggestions, setSearchSuggestions] = useState<Student[]>([]);
+    const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+    const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+    const [highlightedSuggestion, setHighlightedSuggestion] = useState(-1);
+    const searchContainerRef = useRef<HTMLLabelElement>(null);
     const [filterOptions, setFilterOptions] = useState<StudentFilterOptions>(emptyFilterOptions);
     const [courseFilter, setCourseFilter] = useState('');
     const [batchFilter, setBatchFilter] = useState('');
     const [branchFilter, setBranchFilter] = useState('');
-    const [stageFilter, setStageFilter] = useState('');
-    const [studentStatusFilter, setStudentStatusFilter] = useState('');
-    const [enrollmentStatusFilter, setEnrollmentStatusFilter] = useState('');
+    const [draftAdmissionYear, setDraftAdmissionYear] = useState('');
+    const [draftAdmissionMonth, setDraftAdmissionMonth] = useState('');
+    const [appliedAdmissionYear, setAppliedAdmissionYear] = useState('');
+    const [appliedAdmissionMonth, setAppliedAdmissionMonth] = useState('');
     const [admissionFrom, setAdmissionFrom] = useState('');
     const [admissionTo, setAdmissionTo] = useState('');
     const [sortBy, setSortBy] = useState('created_at');
@@ -280,6 +287,50 @@ export default function Students() {
         return () => window.clearTimeout(timeout);
     }, [search]);
 
+    // Fetch a small, independent result set for the autocomplete menu. Typing
+    // never changes the registry table; Enter or selecting a result applies it.
+    useEffect(() => {
+        if (debouncedSearch.length < 2) {
+            setSearchSuggestions([]);
+            setSuggestionsLoading(false);
+            return;
+        }
+
+        const controller = new AbortController();
+        async function loadSearchSuggestions() {
+            setSuggestionsLoading(true);
+            try {
+                const params = new URLSearchParams({ search: debouncedSearch, page: '1', per_page: '7', sort_by: 'full_name', sort_direction: 'asc' });
+                const response = await fetch(`/api/v1/students?${params.toString()}`, {
+                    headers: { Accept: 'application/json' },
+                    credentials: 'same-origin',
+                    signal: controller.signal,
+                });
+                if (!response.ok) throw new Error('Search suggestions are unavailable.');
+                const result = await response.json() as StudentApiResponse;
+                setSearchSuggestions(result.data.map(toStudent));
+            } catch (error) {
+                if (error instanceof DOMException && error.name === 'AbortError') return;
+                setSearchSuggestions([]);
+            } finally {
+                if (!controller.signal.aborted) setSuggestionsLoading(false);
+            }
+        }
+        void loadSearchSuggestions();
+        return () => controller.abort();
+    }, [debouncedSearch]);
+
+    useEffect(() => {
+        function closeSuggestionsOnOutsideClick(event: MouseEvent) {
+            if (event.target instanceof Node && !searchContainerRef.current?.contains(event.target)) {
+                setSuggestionsOpen(false);
+                setHighlightedSuggestion(-1);
+            }
+        }
+        document.addEventListener('mousedown', closeSuggestionsOnOutsideClick);
+        return () => document.removeEventListener('mousedown', closeSuggestionsOnOutsideClick);
+    }, []);
+
     useEffect(() => {
         const controller = new AbortController();
 
@@ -295,13 +346,12 @@ export default function Students() {
                     sort_by: sortBy,
                     sort_direction: sortDirection,
                 });
-                if (debouncedSearch) params.set('search', debouncedSearch);
+                if (appliedSearch) params.set('search', appliedSearch);
                 if (courseFilter) params.set('course_id', courseFilter);
                 if (batchFilter) params.set('batch_id', batchFilter);
                 if (branchFilter) params.set('branch_id', branchFilter);
-                if (stageFilter) params.set('stage_id', stageFilter);
-                if (studentStatusFilter) params.set('student_status', studentStatusFilter);
-                if (enrollmentStatusFilter) params.set('enrollment_status', enrollmentStatusFilter);
+                if (appliedAdmissionYear) params.set('admission_year', appliedAdmissionYear);
+                if (appliedAdmissionMonth) params.set('admission_month', appliedAdmissionMonth);
                 if (admissionFrom) params.set('date_from', admissionFrom);
                 if (admissionTo) params.set('date_to', admissionTo);
 
@@ -336,7 +386,7 @@ export default function Students() {
 
         void loadStudents();
         return () => controller.abort();
-    }, [page, perPage, debouncedSearch, courseFilter, batchFilter, branchFilter, stageFilter, studentStatusFilter, enrollmentStatusFilter, admissionFrom, admissionTo, sortBy, sortDirection]);
+    }, [page, perPage, appliedSearch, courseFilter, batchFilter, branchFilter, appliedAdmissionYear, appliedAdmissionMonth, admissionFrom, admissionTo, sortBy, sortDirection]);
 
     useEffect(() => {
         if (!selectedStudentCode) {
@@ -381,13 +431,15 @@ export default function Students() {
 
     // The API applies filters before pagination; render the current server page as-is.
     const filteredStudents = students;
-    const statuses = [
-        { value: '', label: 'All students' },
-        { value: 'active', label: 'Active' },
-        { value: 'inactive', label: 'Inactive' },
-        { value: 'blocked', label: 'Blocked' },
-    ];
     const batchesForCourse = filterOptions.batches.filter((batch) => !courseFilter || batch.course_id === Number(courseFilter));
+
+    function changeCourseFilter(courseId: string) {
+        setCourseFilter(courseId);
+        if (batchFilter && !filterOptions.batches.some((batch) => String(batch.id) === batchFilter && (!courseId || batch.course_id === Number(courseId)))) {
+            setBatchFilter('');
+        }
+        setPage(1);
+    }
 
     const activeCount = students.filter((student) => student.status.toLowerCase() === 'active').length;
     const registeredCount = students.filter((student) => student.status.toLowerCase() === 'registered').length;
@@ -396,18 +448,44 @@ export default function Students() {
     function clearFilters() {
         setSearch('');
         setDebouncedSearch('');
+        setAppliedSearch('');
+        setSearchSuggestions([]);
+        setSuggestionsOpen(false);
         setCourseFilter('');
         setBatchFilter('');
         setBranchFilter('');
-        setStageFilter('');
-        setStudentStatusFilter('');
-        setEnrollmentStatusFilter('');
+        setDraftAdmissionYear('');
+        setDraftAdmissionMonth('');
+        setAppliedAdmissionYear('');
+        setAppliedAdmissionMonth('');
         setAdmissionFrom('');
         setAdmissionTo('');
         setSortBy('created_at');
         setSortDirection('desc');
         setPage(1);
     }
+
+    function applySearch(value: string) {
+        setSearch(value);
+        setDebouncedSearch(value.trim());
+        setAppliedSearch(value.trim());
+        setPage(1);
+        setSuggestionsOpen(false);
+        setHighlightedSuggestion(-1);
+    }
+
+    function applyFilters() {
+        setAppliedAdmissionYear(draftAdmissionYear);
+        setAppliedAdmissionMonth(draftAdmissionMonth);
+        setPage(1);
+    }
+
+    const admissionYears = Array.from({ length: 30 }, (_, index) => String(new Date().getFullYear() - index));
+    const admissionMonths = [
+        ['1', 'January'], ['2', 'February'], ['3', 'March'], ['4', 'April'],
+        ['5', 'May'], ['6', 'June'], ['7', 'July'], ['8', 'August'],
+        ['9', 'September'], ['10', 'October'], ['11', 'November'], ['12', 'December'],
+    ];
 
     if (loading && !loadError) {
         return (
@@ -459,28 +537,30 @@ export default function Students() {
                                     <p className="mt-1 text-xs text-slate-500">Search all records by student name, registration ID, or phone.</p>
                                 </div>
                                 <div className="flex flex-col gap-2 sm:flex-row">
-                                    <label className="relative block sm:w-[320px]">
+                                    <label ref={searchContainerRef} className="relative block sm:w-[320px]">
                                         <Search className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={17} />
-                                        <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search all students..." className="h-10 w-full rounded-xl border border-slate-200 bg-white pr-10 pl-10 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#008295] focus:ring-3 focus:ring-[#008295]/10" />
-                                        {search && <button type="button" onClick={() => setSearch('')} className="absolute top-1/2 right-3 -translate-y-1/2 text-slate-400 hover:text-slate-700" aria-label="Clear search"><X size={15} /></button>}
+                                        <input value={search} role="combobox" aria-autocomplete="list" aria-expanded={suggestionsOpen && search.trim().length >= 2} aria-controls="student-search-suggestions" aria-activedescendant={highlightedSuggestion >= 0 ? `student-search-option-${highlightedSuggestion}` : undefined} onFocus={() => setSuggestionsOpen(true)} onChange={(event) => { setSearch(event.target.value); setSuggestionsOpen(true); setHighlightedSuggestion(-1); }} onKeyDown={(event) => {
+                                            if (event.key === 'ArrowDown' && suggestionsOpen && searchSuggestions.length) { event.preventDefault(); setHighlightedSuggestion((current) => (current + 1) % searchSuggestions.length); }
+                                            else if (event.key === 'ArrowUp' && suggestionsOpen && searchSuggestions.length) { event.preventDefault(); setHighlightedSuggestion((current) => current <= 0 ? searchSuggestions.length - 1 : current - 1); }
+                                            else if (event.key === 'Enter') { event.preventDefault(); applySearch(highlightedSuggestion >= 0 ? searchSuggestions[highlightedSuggestion].code : search); }
+                                            else if (event.key === 'Escape') { setSuggestionsOpen(false); setHighlightedSuggestion(-1); }
+                                        }} placeholder="Search all students..." className="h-10 w-full rounded-xl border border-slate-200 bg-white pr-10 pl-10 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#008295] focus:ring-3 focus:ring-[#008295]/10" />
+                                        {search && <button type="button" onClick={() => applySearch('')} className="absolute top-1/2 right-3 -translate-y-1/2 text-slate-400 hover:text-slate-700" aria-label="Clear search"><X size={15} /></button>}
+                                        {suggestionsOpen && search.trim().length >= 2 && <div id="student-search-suggestions" role="listbox" className="absolute top-full right-0 left-0 z-30 mt-2 max-h-80 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+                                            {suggestionsLoading ? <p role="status" className="px-4 py-3 text-xs text-slate-500">Searching students...</p> : searchSuggestions.length ? searchSuggestions.map((student, index) => <button id={`student-search-option-${index}`} key={student.id} type="button" role="option" aria-selected={highlightedSuggestion === index} onMouseEnter={() => setHighlightedSuggestion(index)} onMouseDown={(event) => event.preventDefault()} onClick={() => applySearch(student.code)} className={`flex w-full items-center gap-3 px-4 py-3 text-left transition ${highlightedSuggestion === index ? 'bg-[#EFF9FA]' : 'hover:bg-slate-50'}`}>
+                                                <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-[11px] font-bold ${student.color}`}>{student.initials}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-[#1B365D]">{student.name}</span><span className="mt-0.5 block truncate font-mono text-[11px] text-slate-500">{student.code} <span className="font-sans">· {student.phone}</span></span></span><span className="hidden max-w-28 truncate text-right text-[11px] text-slate-400 sm:block">{student.course}</span>
+                                            </button>) : <p className="px-4 py-3 text-xs text-slate-500">No matching students. Press Enter to search the registry.</p>}
+                                        </div>}
                                     </label>
                                     <label className="relative">
                                         <SlidersHorizontal className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={15} />
-                                        <select value={courseFilter} onChange={(event) => { setCourseFilter(event.target.value); setBatchFilter(''); setPage(1); }} className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pr-9 pl-9 text-sm text-slate-600 outline-none focus:border-[#008295] sm:w-[190px]">
+                                        <select aria-label="Filter students by course" value={courseFilter} onChange={(event) => changeCourseFilter(event.target.value)} className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pr-9 pl-9 text-sm text-slate-600 outline-none focus:border-[#008295] sm:w-[190px]">
                                             <option value="">All courses</option>
                                             {filterOptions.courses.map((course) => <option key={course.id} value={course.id}>{course.name}</option>)}
                                         </select>
                                         <ChevronDown className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-slate-400" size={15} />
                                     </label>
                                 </div>
-                            </div>
-                            <div className="mt-5 flex gap-5 overflow-x-auto border-b border-slate-100 text-sm">
-                                {statuses.map((status) => {
-                                    const selected = studentStatusFilter === status.value;
-                                    return <button key={status.value || 'all'} type="button" onClick={() => { setStudentStatusFilter(status.value); setPage(1); }} className={`-mb-px flex shrink-0 items-center gap-2 border-b-2 pb-3 transition ${selected ? 'border-[#008295] font-semibold text-[#1B365D]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-                                        {status.label}
-                                    </button>;
-                                })}
                             </div>
                             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                                 <FilterSelect label="Batch" value={batchFilter} onChange={(value) => { setBatchFilter(value); setPage(1); }}>
@@ -489,16 +569,14 @@ export default function Students() {
                                 <FilterSelect label="Branch" value={branchFilter} onChange={(value) => { setBranchFilter(value); setPage(1); }}>
                                     <option value="">All branches</option>{filterOptions.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
                                 </FilterSelect>
-                                <FilterSelect label="Academic stage" value={stageFilter} onChange={(value) => { setStageFilter(value); setPage(1); }}>
-                                    <option value="">All stages</option>{filterOptions.stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.name}</option>)}
+                                <FilterSelect label="Admission year" value={draftAdmissionYear} onChange={(value) => { setDraftAdmissionYear(value); setDraftAdmissionMonth(''); }}>
+                                    <option value="">Any year</option>{admissionYears.map((year) => <option key={year} value={year}>{year}</option>)}
                                 </FilterSelect>
-                                <FilterSelect label="Enrollment status" value={enrollmentStatusFilter} onChange={(value) => { setEnrollmentStatusFilter(value); setPage(1); }}>
-                                    <option value="">All enrollment statuses</option>
-                                    <option value="none">No enrollments</option>
-                                    {['active', 'enrolled', 'ongoing', 'on hold', 'completed', 'withdrawn', 'cancelled'].map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}
+                                <FilterSelect label="Admission month" value={draftAdmissionMonth} onChange={setDraftAdmissionMonth}>
+                                    <option value="">Any month</option>{admissionMonths.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                                 </FilterSelect>
-                                <label className="block text-xs font-medium text-slate-500">Admitted from<input type="date" value={admissionFrom} onChange={(event) => { setAdmissionFrom(event.target.value); setPage(1); }} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#008295]" /></label>
-                                <label className="block text-xs font-medium text-slate-500">Admitted to<input type="date" value={admissionTo} min={admissionFrom || undefined} onChange={(event) => { setAdmissionTo(event.target.value); setPage(1); }} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#008295]" /></label>
+                                <label className="block text-xs font-medium text-slate-500">Admitted from<input type="date" value={admissionFrom} onChange={(event) => setAdmissionFrom(event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#008295]" /></label>
+                                <label className="block text-xs font-medium text-slate-500">Admitted to<input type="date" value={admissionTo} min={admissionFrom || undefined} onChange={(event) => setAdmissionTo(event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#008295]" /></label>
                                 <FilterSelect label="Sort by" value={sortBy} onChange={(value) => { setSortBy(value); setPage(1); }}>
                                     <option value="created_at">Recently added</option><option value="student_code">Student ID</option><option value="full_name">Name</option><option value="admission_date">Admission date</option>
                                 </FilterSelect>
@@ -507,7 +585,10 @@ export default function Students() {
                                 </FilterSelect>
                             </div>
                             <div className="mt-3 flex justify-end">
-                                <button type="button" onClick={clearFilters} className="rounded-lg px-3 py-2 text-xs font-semibold text-[#008295] transition hover:bg-[#EFF9FA]">Clear all filters</button>
+                                <div className="flex gap-2">
+                                    <button type="button" onClick={clearFilters} className="rounded-lg px-3 py-2 text-xs font-semibold text-[#008295] transition hover:bg-[#EFF9FA]">Clear all filters</button>
+                                    <button type="button" onClick={applyFilters} disabled={loading} className="rounded-lg bg-[#1B365D] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#254878] disabled:opacity-50">Filter students</button>
+                                </div>
                             </div>
                         </div>
 

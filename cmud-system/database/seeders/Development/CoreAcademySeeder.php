@@ -92,6 +92,31 @@ class CoreAcademySeeder extends Seeder
             $batches[$batch['code']] = (int) $saved->id;
         }
 
+        // Keep one deterministic inactive profile available for registry filter checks.
+        $this->saveRow('students', ['student_code' => 'DEV-ACA-INACTIVE-001'], [
+            'institute_id' => $instituteId,
+            'admission_branch_id' => $dhakaBranchId,
+            'admission_date' => '2025-02-10',
+            'full_name' => 'Demo Inactive Student',
+            'father_name' => 'Demo Guardian Inactive 001',
+            'mother_name' => 'Demo Parent Inactive 001',
+            'date_of_birth' => '2001-06-15',
+            'gender' => 'female',
+            'phone' => '+880000009999',
+            'alternative_phone' => null,
+            'email' => 'inactive.student.001@example.invalid',
+            'present_address' => 'Fictional Dhaka area, Bangladesh 0000',
+            'permanent_address' => 'Fictional district address, Bangladesh 0000',
+            'medical_college_id' => $college->id,
+            'qualification' => 'Fictional medical qualification',
+            'graduation_year' => 2022,
+            'bmdc_number' => null,
+            'photo_path' => null,
+            'documents' => json_encode([], JSON_THROW_ON_ERROR),
+            'status' => 'inactive',
+            'notes' => 'Fictional inactive student for Academy registry filter checks.',
+        ]);
+
         $teacher = $this->saveRow('teachers', ['teacher_code' => 'DEV-TEACHER-001'], [
             'institute_id' => $instituteId,
             'staff_id' => $staffId,

@@ -119,9 +119,14 @@ export default function StudentAdmission({ branches, batches, medicalColleges }:
         };
 
         try {
-            const response = await fetch('/api/v1/student/admission', {
+            const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
+            const response = await fetch('/academy/students/admissions', {
                 method: 'POST',
-                headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                },
                 credentials: 'same-origin',
                 body: JSON.stringify(payload),
             });

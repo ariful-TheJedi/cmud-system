@@ -142,6 +142,16 @@ The following examples define proposed inputs and outcomes, not verified busines
 - **Expected:** Exactly one matching student; zero enrollments; valid owner/branch references.
 - **Verify:** SQL joins, student GET API, UI profile (if built).
 
+### SD-ACA-011 â€” Inactive student registry filter
+
+- **Purpose:** Provide a stable inactive student for checking the Academy registry status filter.
+- **Tables:** `students`, `institutes`, `branches`, and `medical_colleges`.
+- **Lookup key:** `DEV-ACA-INACTIVE-001`.
+- **Setup:** One fictional inactive student linked to the seeded development institute and Dhaka branch; no enrollment is required.
+- **Expected:** Exactly one student with status `inactive` and valid institute, branch, and college references.
+- **Verify:** Run the development Academy seeder twice and confirm the stable student code remains unique and unchanged.
+- **Status:** Implemented in `CoreAcademySeeder`; not executed against the development database for this change.
+
 ### SD-ACA-002 â€” Student with one enrollment
 
 - **Purpose:** Verify student â†’ course â†’ batch enrollment information.

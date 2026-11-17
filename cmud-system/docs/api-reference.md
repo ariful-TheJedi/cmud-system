@@ -33,6 +33,68 @@ The Academy routes are registered from `app/Modules/Academy/routes/api.php`.
 | Method | URL | Route name | Handler | Middleware |
 | --- | --- | --- | --- | --- |
 | `GET` | `/api/v1/students` | `students.index` | `StudentController@index` | `api` |
+| `GET` | `/api/v1/academy-catalog/courses` | `academy.catalog.courses.index` | `AcademyCatalogController@courses` | `api` |
+| `POST` | `/api/v1/academy-catalog/courses` | `academy.catalog.courses.store` | `AcademyCatalogController@storeCourse` | `api` |
+| `GET` | `/api/v1/academy-catalog/courses/{course}` | `academy.catalog.courses.show` | `AcademyCatalogController@showCourse` | `api` |
+| `PUT` | `/api/v1/academy-catalog/courses/{course}` | `academy.catalog.courses.update` | `AcademyCatalogController@updateCourse` | `api` |
+| `DELETE` | `/api/v1/academy-catalog/courses/{course}` | `academy.catalog.courses.destroy` | `AcademyCatalogController@destroyCourse` | `api` |
+| `GET` | `/api/v1/academy-catalog/batches` | `academy.catalog.batches.index` | `AcademyCatalogController@batches` | `api` |
+| `POST` | `/api/v1/academy-catalog/batches` | `academy.catalog.batches.store` | `AcademyCatalogController@storeBatch` | `api` |
+| `GET` | `/api/v1/academy-catalog/batches/{batch}` | `academy.catalog.batches.show` | `AcademyCatalogController@showBatch` | `api` |
+| `PUT` | `/api/v1/academy-catalog/batches/{batch}` | `academy.catalog.batches.update` | `AcademyCatalogController@updateBatch` | `api` |
+| `DELETE` | `/api/v1/academy-catalog/batches/{batch}` | `academy.catalog.batches.destroy` | `AcademyCatalogController@destroyBatch` | `api` |
+| `GET` | `/api/v1/academy-catalog/subjects` | `academy.catalog.subjects.index` | `AcademyCatalogController@subjects` | `api` |
+| `POST` | `/api/v1/academy-catalog/subjects` | `academy.catalog.subjects.store` | `AcademyCatalogController@storeSubject` | `api` |
+| `GET` | `/api/v1/academy-catalog/subjects/{subject}` | `academy.catalog.subjects.show` | `AcademyCatalogController@showSubject` | `api` |
+| `PUT` | `/api/v1/academy-catalog/subjects/{subject}` | `academy.catalog.subjects.update` | `AcademyCatalogController@updateSubject` | `api` |
+| `DELETE` | `/api/v1/academy-catalog/subjects/{subject}` | `academy.catalog.subjects.destroy` | `AcademyCatalogController@destroySubject` | `api` |
+| `GET` | `/api/v1/academy-catalog/teachers` | `academy.catalog.teachers.index` | `TeacherManagementController@index` | `api` |
+| `POST` | `/api/v1/academy-catalog/teachers` | `academy.catalog.teachers.store` | `TeacherManagementController@store` | `api` |
+| `GET` | `/api/v1/academy-catalog/teachers/{teacher}` | `academy.catalog.teachers.show` | `TeacherManagementController@show` | `api` |
+| `PUT` | `/api/v1/academy-catalog/teachers/{teacher}` | `academy.catalog.teachers.update` | `TeacherManagementController@update` | `api` |
+| `DELETE` | `/api/v1/academy-catalog/teachers/{teacher}` | `academy.catalog.teachers.destroy` | `TeacherManagementController@destroy` | `api` |
+
+### Academy catalog: courses, batches, and subjects
+
+The catalog endpoints are implemented by `AcademyCatalogController` and delegate persistence to `AcademyCatalogService`. `subjects` are the reusable course modules/topics; `courses` and `subjects` have a many-to-many relationship through `course_subject`. All these routes currently use only the standard `api` middleware; no route-level authentication middleware is declared.
+
+#### Courses
+
+- `GET /api/v1/academy-catalog/courses` returns a paginated list (25 per page) with institute, subject, and batch summaries.
+- `GET /api/v1/academy-catalog/courses/{course}` returns one course with its institute, subjects, and batches. Unknown IDs return `404`.
+- `POST /api/v1/academy-catalog/courses` creates a course. Required fields: `institute_id` (existing institute), `code`, `name`, positive `duration_months`, positive `completion_period_months`, and `course_mode` (`online`, `offline`, or `dual`). Optional fields: `description`, `is_active`, and `subject_ids` (array of distinct existing subject IDs). Success returns `201` with the created record under `data`.
+- `PUT /api/v1/academy-catalog/courses/{course}` updates supplied fields using the same validation rules. Optional `subject_ids` synchronizes the module links: omitting the field preserves links; passing an empty array removes all links. Success returns the updated record under `data`.
+- `DELETE /api/v1/academy-catalog/courses/{course}` deletes a course only when it has no dependent stages, batches, enrollments, certificate templates, communication groups, price versions, student-expense price versions, or teacher assignments. In-use courses return `409`; successful deletion returns `200` with a message.
+
+#### Batches
+
+- `GET /api/v1/academy-catalog/batches` returns a paginated list (25 per page) with course and branch summaries.
+- `GET /api/v1/academy-catalog/batches/{batch}` returns one batch with its course and branch. Unknown IDs return `404`.
+- `POST /api/v1/academy-catalog/batches` creates a batch. Required fields: `course_id`, `branch_id`, `code`, `name`, `starts_on`, `expected_ends_on` (on or after start), and `status`. Optional fields: `admission_opens_on`, `admission_closes_on` (on or after opening date), `actual_ends_on`, `capacity` (positive integer), and `notes`. The course and branch must exist, and the branch must belong to the same institute as the selected course. Success returns `201` with the created record under `data`.
+- `PUT /api/v1/academy-catalog/batches/{batch}` updates supplied fields with the same validation rules, including checking the resulting course/branch pair, and returns the updated record under `data`.
+- `DELETE /api/v1/academy-catalog/batches/{batch}` deletes a batch only when it has no enrollments, student-stage records, or communication groups. In-use batches return `409`; successful deletion returns `200` with a message.
+
+#### Subjects (course modules/topics)
+
+- `GET /api/v1/academy-catalog/subjects` returns a paginated list (25 per page) with linked course summaries.
+- `GET /api/v1/academy-catalog/subjects/{subject}` returns one subject with linked courses. Unknown IDs return `404`.
+- `POST /api/v1/academy-catalog/subjects` creates a subject. Required fields: unique `code` and `name`. Optional fields: `description`, `is_active`, and `course_ids` (array of distinct existing course IDs). Success returns `201` with the created record under `data`.
+- `PUT /api/v1/academy-catalog/subjects/{subject}` updates supplied fields. Optional `course_ids` synchronizes course links; omitting it preserves existing links, while an empty array clears them. Success returns the updated record under `data`.
+- `DELETE /api/v1/academy-catalog/subjects/{subject}` deletes the subject and its course links, returning `200` with a message.
+
+Create/update validation errors return `422`. Collection routes return Laravel paginator links and metadata. No route-level authentication middleware is declared on these catalog routes.
+
+#### Teachers
+
+Teacher management is implemented by `TeacherManagementController` and `TeacherManagementService`. Teacher records belong to an institute, may reference a staff record, and may have course and branch assignments. These routes currently use only the standard `api` middleware; no route-level authentication middleware is declared.
+
+- `GET /api/v1/academy-catalog/teachers` returns a paginated list (25 per page) with institute, staff, course, and branch summaries.
+- `GET /api/v1/academy-catalog/teachers/{teacher}` returns one teacher with those relationships. Unknown IDs return `404`.
+- `POST /api/v1/academy-catalog/teachers` creates a teacher. Required fields: `institute_id` (existing institute), unique `teacher_code`, `full_name`, and `phone`. Optional profile fields: `staff_id` (nullable, existing staff record), `email`, `qualification`, `specialization`, `designation`, `organization`, `bmdc_number`, `address`, `photo_path`, `is_active`, and `notes`. Optional `course_assignments` accepts an array of objects with distinct existing `course_id` values and optional `teaching_role`, `is_active`, and `notes`. Optional `branch_ids` is an array of distinct existing branch IDs. Success returns `201` with the teacher and linked records under `data`.
+- `PUT /api/v1/academy-catalog/teachers/{teacher}` updates supplied fields under the same validation rules. Omitting `course_assignments` or `branch_ids` preserves current links; providing either collection replaces that set of assignments, and an empty array clears it. Success returns the updated record under `data`.
+- `DELETE /api/v1/academy-catalog/teachers/{teacher}` deletes a teacher only when no course-teacher assignment or institute expense references the teacher. In-use teachers return `409`; successful deletion removes branch links and returns `200` with a message.
+
+Validation errors return `422`. Teacher create/update changes and assignment synchronization run in a database transaction.
 
 ### `GET /api/v1/students`
 
@@ -72,7 +134,7 @@ The `data` resource includes profile fields, institute and admission-branch summ
 
 ### `POST /api/v1/students/admissions`
 
-Creates a student and their initial enrollment. Requires `auth` middleware and an active authenticated user who is a super administrator or has the `students.admissions.create` permission.
+Creates a student and their initial enrollment. No route-level authentication middleware or request authorization check is currently applied. A same-origin web form is also available at `POST /academy/students/admissions`, which uses the web CSRF protection.
 
 Required request fields:
 
@@ -86,13 +148,13 @@ Required request fields:
 
 Optional fields: `course_id` (nullable, existing course), `admission_date` (date), `father_name`, `mother_name` (strings up to 255), `date_of_birth` (date), `gender` (string up to 50), `phone` (string up to 30, required when `phone_numbers` absent), `alternative_phone` (string up to 30), `email` (valid email up to 255), `present_address`, `permanent_address`, `notes` (strings), `medical_college_id` (existing medical college), `qualification` (string up to 255), and `graduation_year` (integer from 1900 through 2100).
 
-Additional relationship validation checks that the batch is offered at the selected admission branch, the branch belongs to the course's institute, and, when `course_id` is supplied, the batch belongs to that course. Validation errors return `422`; failed authorization returns `403`.
+Additional relationship validation checks that the batch is offered at the selected admission branch, the branch belongs to the course's institute, and, when `course_id` is supplied, the batch belongs to that course. Validation errors return `422`.
 
 Success returns `201 Created` with `status`, `message`, and `data.student` (`id`, `student_code`, `full_name`) and `data.enrollment` (`id`, `enrollment_code`). An unexpected failure is logged and returns `500` with a generic failure message.
 
 ### `POST /api/v1/student/admission`
 
-Legacy/alternate URL to the same `StudentAdmissionController@store` as `POST /api/v1/students/admissions`. It has the same authentication, authorization, validation, side effects, and response described above. Both URLs are currently registered.
+Alternate URL to the same `StudentAdmissionController@store` as `POST /api/v1/students/admissions`. It has the same validation, side effects, and response described above. Both URLs are currently registered and have no route-level authentication middleware.
 
 ### `POST /api/v1/students/{studentCode}/enrollments`
 

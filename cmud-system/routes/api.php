@@ -9,6 +9,7 @@ Route::prefix('v1')->group(function (): void {
     ]))->name('api.v1.root');
 
     require app_path('Modules/Institute/routes/api.php');
+    require app_path('Modules/Setting/routes/api.php');
     require app_path('Modules/Academy/routes/api.php');
     require app_path('Modules/Finance/routes/api.php');
     require app_path('Modules/Security/routes/api.php');

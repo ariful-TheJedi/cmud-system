@@ -5,6 +5,7 @@ namespace App\Modules\Academy\Services;
 use App\Models\Academy\Enrollment;
 use App\Models\Academy\Student;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class StudentSearchService
 {
@@ -20,7 +21,7 @@ class StudentSearchService
     {
         $query = Student::query()->with([
             'admissionBranch:id,name',
-            'latestEnrollment' => fn (Builder $enrollmentQuery) => $this->applyEnrollmentFilters($enrollmentQuery, $filters),
+            'latestEnrollment' => fn (HasOne $enrollmentQuery) => $this->applyEnrollmentFilters($enrollmentQuery->getQuery(), $filters),
             'latestEnrollment.course:id,name',
             'latestEnrollment.branch:id,name',
             'latestEnrollment.batch:id,name',
@@ -53,16 +54,16 @@ class StudentSearchService
             $query->where('institute_id', $filters['institute_id']);
         }
 
-        foreach (['admission_date', 'date_from', 'date_to'] as $dateFilter) {
-            if (isset($filters[$dateFilter])) {
-                $column = 'admission_date';
-                $operator = match ($dateFilter) {
-                    'date_from' => '>=',
-                    'date_to' => '<=',
-                    default => '=',
-                };
-                $query->where($column, $operator, $filters[$dateFilter]);
-            }
+        if (isset($filters['admission_date'])) {
+            $query->whereDate('admission_date', $filters['admission_date']);
+        }
+
+        if (isset($filters['date_from'])) {
+            $query->whereDate('admission_date', '>=', $filters['date_from']);
+        }
+
+        if (isset($filters['date_to'])) {
+            $query->whereDate('admission_date', '<=', $filters['date_to']);
         }
 
         if (isset($filters['admission_month'])) {

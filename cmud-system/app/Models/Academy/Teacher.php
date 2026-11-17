@@ -60,6 +60,14 @@ class Teacher extends Model
             ->withTimestamps();
     }
 
+    /** Subjects are the direct teaching assignment targets for a teacher. */
+    public function subjects(): BelongsToMany
+    {
+        return $this->belongsToMany(Subject::class, 'subject_teacher')
+            ->withPivot(['teaching_role', 'is_active', 'notes'])
+            ->withTimestamps();
+    }
+
     public function branches(): BelongsToMany
     {
         return $this->belongsToMany(Branch::class, 'branch_teacher')->withTimestamps();
