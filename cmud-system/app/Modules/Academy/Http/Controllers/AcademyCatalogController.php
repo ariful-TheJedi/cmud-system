@@ -20,18 +20,20 @@ use Illuminate\Validation\Rule;
 class AcademyCatalogController extends Controller
 {
     /** List courses with pagination and the relationships needed by the catalog UI. */
-    public function courses(AcademyCatalogService $catalog): JsonResponse
+    public function courses(Request $request, AcademyCatalogService $catalog): JsonResponse
     {
-        return response()->json($catalog->courses());
+        $perPage = min(max($request->integer('per_page', 25), 1), 500);
+
+        return response()->json($catalog->courses($perPage));
     }
 
     /** Return one course with its modules and batches. */
     public function showCourse(Course $course): JsonResponse
     {
-        return response()->json(['data' => $course->load(['institute:id,name', 'subjects:id,code,name', 'batches:id,course_id,branch_id,code,name,status,starts_on,capacity', 'batches.branch:id,name'])]);
+        return response()->json(['data' => $course->load(['institute:id,name', 'subjects:id,course_id,code,name', 'batches:id,course_id,branch_id,code,name,status,starts_on,capacity', 'batches.branch:id,name'])]);
     }
 
-    /** Validate and create a course, optionally attaching existing subjects. */
+    /** Validate and create a course; modules are created through the subject endpoints. */
     public function storeCourse(Request $request, AcademyCatalogService $catalog): JsonResponse
     {
         $data = $request->validate([
@@ -43,14 +45,12 @@ class AcademyCatalogController extends Controller
             'completion_period_months' => ['required', 'integer', 'min:1', 'max:65535'],
             'course_mode' => ['required', Rule::in(['online', 'offline', 'dual'])],
             'is_active' => ['sometimes', 'boolean'],
-            'subject_ids' => ['sometimes', 'array'],
-            'subject_ids.*' => ['integer', 'distinct', 'exists:subjects,id'],
         ]);
 
         return response()->json(['data' => $catalog->createCourse($data)], 201);
     }
 
-    /** Update supplied course fields and optionally replace its subject links. */
+    /** Update supplied course fields without changing its owned modules. */
     public function updateCourse(Request $request, Course $course, AcademyCatalogService $catalog): JsonResponse
     {
         $data = $request->validate([
@@ -62,8 +62,6 @@ class AcademyCatalogController extends Controller
             'completion_period_months' => ['sometimes', 'integer', 'min:1', 'max:65535'],
             'course_mode' => ['sometimes', Rule::in(['online', 'offline', 'dual'])],
             'is_active' => ['sometimes', 'boolean'],
-            'subject_ids' => ['sometimes', 'array'],
-            'subject_ids.*' => ['integer', 'distinct', 'exists:subjects,id'],
         ]);
 
         return response()->json(['data' => $catalog->updateCourse($course, $data)]);
@@ -122,7 +120,7 @@ class AcademyCatalogController extends Controller
         return response()->json(['message' => 'Batch deleted.']);
     }
 
-    /** List subjects (course modules) and their linked courses. */
+    /** List course modules with their owning course. */
     public function subjects(Request $request, AcademyCatalogService $catalog): JsonResponse
     {
         $perPage = min(max($request->integer('per_page', 25), 1), 500);
@@ -130,13 +128,13 @@ class AcademyCatalogController extends Controller
         return response()->json($catalog->subjects($perPage));
     }
 
-    /** Return one subject and all linked courses. */
+    /** Return one module with its course and assigned teachers. */
     public function showSubject(Subject $subject): JsonResponse
     {
-        return response()->json(['data' => $subject->load('courses:id,code,name')]);
+        return response()->json(['data' => $subject->load(['course:id,code,name', 'teachers:id,teacher_code,full_name'])]);
     }
 
-    /** Validate and create a subject, optionally linking it to courses. */
+    /** Validate and create a module owned by one course. */
     public function storeSubject(Request $request, AcademyCatalogService $catalog): JsonResponse
     {
         $data = $request->validate($this->subjectRules());
@@ -144,7 +142,7 @@ class AcademyCatalogController extends Controller
         return response()->json(['data' => $catalog->createSubject($data)], 201);
     }
 
-    /** Update subject fields and optionally synchronize its course links. */
+    /** Update module fields, including its single owning course. */
     public function updateSubject(Request $request, Subject $subject, AcademyCatalogService $catalog): JsonResponse
     {
         $data = $request->validate($this->subjectRules(true, $subject));
@@ -152,7 +150,7 @@ class AcademyCatalogController extends Controller
         return response()->json(['data' => $catalog->updateSubject($subject, $data)]);
     }
 
-    /** Delete a subject and its course links. */
+    /** Delete a module and its teacher assignment pivot rows. */
     public function destroySubject(Subject $subject, AcademyCatalogService $catalog): JsonResponse
     {
         $catalog->deleteSubject($subject);
@@ -215,11 +213,10 @@ class AcademyCatalogController extends Controller
 
         return [
             'code' => [$required, 'string', 'max:255', Rule::unique('subjects', 'code')->ignore($subject?->id)],
+            'course_id' => [$required, 'integer', 'exists:courses,id'],
             'name' => [$required, 'string', 'max:255'],
             'description' => ['sometimes', 'nullable', 'string'],
             'is_active' => ['sometimes', 'boolean'],
-            'course_ids' => ['sometimes', 'array'],
-            'course_ids.*' => ['integer', 'distinct', 'exists:courses,id'],
         ];
     }
 }

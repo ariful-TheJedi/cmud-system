@@ -56,15 +56,15 @@ The Academy routes are registered from `app/Modules/Academy/routes/api.php`.
 
 ### Academy catalog: courses, batches, and subjects
 
-The catalog endpoints are implemented by `AcademyCatalogController` and delegate persistence to `AcademyCatalogService`. `subjects` are the reusable course modules/topics; `courses` and `subjects` have a many-to-many relationship through `course_subject`. All these routes currently use only the standard `api` middleware; no route-level authentication middleware is declared.
+The catalog endpoints are implemented by `AcademyCatalogController` and delegate persistence to `AcademyCatalogService`. `subjects` are course modules: each module belongs to one course through `subjects.course_id`. Teachers and modules have a many-to-many relationship through `subject_teacher`; courses have no direct teacher assignment. All these routes currently use only the standard `api` middleware; no route-level authentication middleware is declared.
 
 #### Courses
 
 - `GET /api/v1/academy-catalog/courses` returns a paginated list (25 per page) with institute, subject, and batch summaries.
 - `GET /api/v1/academy-catalog/courses/{course}` returns one course with its institute, subjects, and batches. Unknown IDs return `404`.
-- `POST /api/v1/academy-catalog/courses` creates a course. Required fields: `institute_id` (existing institute), `code`, `name`, positive `duration_months`, positive `completion_period_months`, and `course_mode` (`online`, `offline`, or `dual`). Optional fields: `description`, `is_active`, and `subject_ids` (array of distinct existing subject IDs). Success returns `201` with the created record under `data`.
-- `PUT /api/v1/academy-catalog/courses/{course}` updates supplied fields using the same validation rules. Optional `subject_ids` synchronizes the module links: omitting the field preserves links; passing an empty array removes all links. Success returns the updated record under `data`.
-- `DELETE /api/v1/academy-catalog/courses/{course}` deletes a course only when it has no dependent stages, batches, enrollments, certificate templates, communication groups, price versions, student-expense price versions, or teacher assignments. In-use courses return `409`; successful deletion returns `200` with a message.
+- `POST /api/v1/academy-catalog/courses` creates a course. Required fields: `institute_id` (existing institute), `code`, `name`, positive `duration_months`, positive `completion_period_months`, and `course_mode` (`online`, `offline`, or `dual`). Optional fields: `description` and `is_active`. Success returns `201` with the course and its modules under `data`.
+- `PUT /api/v1/academy-catalog/courses/{course}` updates supplied course fields. Module ownership is managed on the subject endpoints through `course_id`. Success returns the updated course and modules under `data`.
+- `DELETE /api/v1/academy-catalog/courses/{course}` deletes a course only when it has no dependent stages, batches, enrollments, certificate templates, communication groups, price versions, student-expense price versions, or modules. In-use courses return `409`; successful deletion returns `200` with a message.
 
 #### Batches
 
@@ -76,23 +76,23 @@ The catalog endpoints are implemented by `AcademyCatalogController` and delegate
 
 #### Subjects (course modules/topics)
 
-- `GET /api/v1/academy-catalog/subjects` returns a paginated list (25 per page) with linked course summaries.
-- `GET /api/v1/academy-catalog/subjects/{subject}` returns one subject with linked courses. Unknown IDs return `404`.
-- `POST /api/v1/academy-catalog/subjects` creates a subject. Required fields: unique `code` and `name`. Optional fields: `description`, `is_active`, and `course_ids` (array of distinct existing course IDs). Success returns `201` with the created record under `data`.
-- `PUT /api/v1/academy-catalog/subjects/{subject}` updates supplied fields. Optional `course_ids` synchronizes course links; omitting it preserves existing links, while an empty array clears them. Success returns the updated record under `data`.
-- `DELETE /api/v1/academy-catalog/subjects/{subject}` deletes the subject and its course links, returning `200` with a message.
+- `GET /api/v1/academy-catalog/subjects` returns a paginated list (25 per page) with the owning course summary.
+- `GET /api/v1/academy-catalog/subjects/{subject}` returns one module with its course and assigned teachers. Unknown IDs return `404`.
+- `POST /api/v1/academy-catalog/subjects` creates a module. Required fields: `course_id` (existing course), unique `code`, and `name`. Optional fields: `description` and `is_active`. Success returns `201` with the module under `data`.
+- `PUT /api/v1/academy-catalog/subjects/{subject}` updates supplied fields, including its single `course_id`. Success returns the updated module under `data`.
+- `DELETE /api/v1/academy-catalog/subjects/{subject}` deletes the module and its teacher assignment rows, returning `200` with a message.
 
 Create/update validation errors return `422`. Collection routes return Laravel paginator links and metadata. No route-level authentication middleware is declared on these catalog routes.
 
 #### Teachers
 
-Teacher management is implemented by `TeacherManagementController` and `TeacherManagementService`. Teacher records belong to an institute, may reference a staff record, and may have course and branch assignments. These routes currently use only the standard `api` middleware; no route-level authentication middleware is declared.
+Teacher management is implemented by `TeacherManagementController` and `TeacherManagementService`. Teacher records belong to an institute, may reference a staff record, and may have module and branch assignments. These routes currently use only the standard `api` middleware; no route-level authentication middleware is declared.
 
-- `GET /api/v1/academy-catalog/teachers` returns a paginated list (25 per page) with institute, staff, course, and branch summaries.
+- `GET /api/v1/academy-catalog/teachers` returns a paginated list (25 per page) with institute, staff, module, and branch summaries.
 - `GET /api/v1/academy-catalog/teachers/{teacher}` returns one teacher with those relationships. Unknown IDs return `404`.
-- `POST /api/v1/academy-catalog/teachers` creates a teacher. Required fields: `institute_id` (existing institute), unique `teacher_code`, `full_name`, and `phone`. Optional profile fields: `staff_id` (nullable, existing staff record), `email`, `qualification`, `specialization`, `designation`, `organization`, `bmdc_number`, `address`, `photo_path`, `is_active`, and `notes`. Optional `course_assignments` accepts an array of objects with distinct existing `course_id` values and optional `teaching_role`, `is_active`, and `notes`. Optional `branch_ids` is an array of distinct existing branch IDs. Success returns `201` with the teacher and linked records under `data`.
-- `PUT /api/v1/academy-catalog/teachers/{teacher}` updates supplied fields under the same validation rules. Omitting `course_assignments` or `branch_ids` preserves current links; providing either collection replaces that set of assignments, and an empty array clears it. Success returns the updated record under `data`.
-- `DELETE /api/v1/academy-catalog/teachers/{teacher}` deletes a teacher only when no course-teacher assignment or institute expense references the teacher. In-use teachers return `409`; successful deletion removes branch links and returns `200` with a message.
+- `POST /api/v1/academy-catalog/teachers` creates a teacher. Required fields: `institute_id` (existing institute), unique `teacher_code`, `full_name`, and `phone`. Optional profile fields: `staff_id` (nullable, existing staff record), `email`, `qualification`, `specialization`, `designation`, `organization`, `bmdc_number`, `address`, `photo_path`, `is_active`, and `notes`. Optional `subject_assignments` accepts an array of objects with distinct existing `subject_id` values and optional `teaching_role`, `is_active`, and `notes`. Optional `branch_ids` is an array of distinct existing branch IDs. Success returns `201` with the teacher and linked records under `data`.
+- `PUT /api/v1/academy-catalog/teachers/{teacher}` updates supplied fields under the same validation rules. Omitting `subject_assignments` or `branch_ids` preserves current links; providing either collection replaces that set of assignments, and an empty array clears it. Success returns the updated record under `data`.
+- `DELETE /api/v1/academy-catalog/teachers/{teacher}` deletes a teacher only when no module assignment or institute expense references the teacher. In-use teachers return `409`; successful deletion removes branch links and returns `200` with a message.
 
 Validation errors return `422`. Teacher create/update changes and assignment synchronization run in a database transaction.
 

@@ -135,18 +135,6 @@ class CoreAcademySeeder extends Seeder
         ]);
         $teacherId = (int) $teacher->id;
 
-        foreach ([
-            ['course' => 'DEV-COURSE-DMU', 'role' => 'Lead instructor'],
-            ['course' => 'DEV-COURSE-EMT', 'role' => 'Guest instructor'],
-        ] as $assignment) {
-            $note = $this->scenarioNote('SD-ACA-008-COURSE-'.str_replace('DEV-COURSE-', '', $assignment['course']), 'Seed-owned course teacher assignment.');
-            $this->saveRow('course_teacher', ['notes' => $note], [
-                'course_id' => $courses[$assignment['course']],
-                'teacher_id' => $teacherId,
-                'teaching_role' => $assignment['role'],
-                'is_active' => true,
-            ]);
-        }
         $this->saveRow('branch_teacher', [
             'branch_id' => $dhakaBranchId,
             'teacher_id' => $teacherId,
@@ -154,25 +142,31 @@ class CoreAcademySeeder extends Seeder
 
         $subjects = [];
         foreach ([
-            ['code' => 'DEV-SUBJ-EMERGENCY', 'name' => 'Emergency Care Fundamentals'],
-            ['code' => 'DEV-SUBJ-LIFESUPPORT', 'name' => 'Life Support Fundamentals'],
+            ['code' => 'DEV-SUBJ-EMERGENCY', 'name' => 'Emergency Care Fundamentals', 'course' => 'DEV-COURSE-DMU'],
+            ['code' => 'DEV-SUBJ-EMERGENCY-EMT', 'name' => 'Emergency Care Fundamentals', 'course' => 'DEV-COURSE-EMT'],
+            ['code' => 'DEV-SUBJ-LIFESUPPORT', 'name' => 'Life Support Fundamentals', 'course' => 'DEV-COURSE-BLS'],
         ] as $subject) {
             $saved = $this->saveRow('subjects', ['code' => $subject['code']], [
                 'name' => $subject['name'],
+                'course_id' => $courses[$subject['course']],
                 'description' => 'Fictional subject for development demonstrations.',
                 'is_active' => true,
             ]);
             $subjects[$subject['code']] = (int) $saved->id;
         }
         foreach ([
-            ['course' => 'DEV-COURSE-DMU', 'subject' => 'DEV-SUBJ-EMERGENCY'],
-            ['course' => 'DEV-COURSE-EMT', 'subject' => 'DEV-SUBJ-EMERGENCY'],
-            ['course' => 'DEV-COURSE-BLS', 'subject' => 'DEV-SUBJ-LIFESUPPORT'],
-        ] as $link) {
-            $this->saveRow('course_subject', [
-                'course_id' => $courses[$link['course']],
+            ['subject' => 'DEV-SUBJ-EMERGENCY', 'role' => 'Lead instructor'],
+            ['subject' => 'DEV-SUBJ-EMERGENCY-EMT', 'role' => 'Guest instructor'],
+            ['subject' => 'DEV-SUBJ-LIFESUPPORT', 'role' => 'Guest instructor'],
+        ] as $index => $link) {
+            $this->saveRow('subject_teacher', [
                 'subject_id' => $subjects[$link['subject']],
-            ], []);
+                'teacher_id' => $teacherId,
+            ], [
+                'teaching_role' => $link['role'],
+                'is_active' => true,
+                'notes' => $this->scenarioNote('SD-ACA-008-TEACHER-'.($index + 1), 'Seed-owned module teaching assignment.'),
+            ]);
         }
 
         $coursePrices = [];

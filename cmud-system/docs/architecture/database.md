@@ -402,6 +402,45 @@ Relationships from this table:
 
 2. Students & Academy 
 
+### Course modules and teacher assignments
+
+`subjects` are course modules: one course has many modules, and each module belongs to one course. Teachers and modules have a many-to-many relationship through `subject_teacher`. Courses have no direct teacher assignment.
+
+```mermaid
+erDiagram
+    courses ||--o{ subjects : contains
+    subjects ||--o{ subject_teacher : assigns
+    teachers ||--o{ subject_teacher : teaches
+    institutes ||--o{ teachers : employs
+    staff o|--o{ teachers : profiles
+    branches ||--o{ branch_teacher : assigned
+    teachers ||--o{ branch_teacher : works_at
+
+    courses {
+        bigint id PK
+        bigint institute_id FK
+    }
+    subjects {
+        bigint id PK
+        bigint course_id FK
+        string code UK
+        string name
+    }
+    teachers {
+        bigint id PK
+        bigint institute_id FK
+        bigint staff_id FK
+        string teacher_code UK
+    }
+    subject_teacher {
+        bigint id PK
+        bigint subject_id FK
+        bigint teacher_id FK
+        string teaching_role
+        boolean is_active
+    }
+```
+
 Table 2.1 — students
 | Column | Purpose |
 |---|---|
@@ -492,11 +531,10 @@ Relationships from this table:
 - `enrollments.course_id` -> `courses.id` (1:N).
 - `certificate_templates.course_id` -> `courses.id` (1:N; optional).
 - `communication_groups.course_id` -> `courses.id` (1:N; optional).
-- `course_teacher.course_id` -> `courses.id` (1:N).
-- `course_subject.course_id` -> `courses.id` (1:N).
+- `subjects.course_id` -> `courses.id` (1:N; each module belongs to one course).
 - `student_expense_price_versions.course_id` -> `courses.id` (1:N; optional).
 - `course_price_versions.course_id` -> `courses.id` (1:N).
-- Courses and subjects have a many-to-many relationship through `course_subject`.
+- Courses have many subjects; courses have no direct teacher assignment.
 
 
 
@@ -803,13 +841,13 @@ Foreign keys stored in this table:
 - `institute_id` -> `institutes.id`.
 - `staff_id` -> `staff.id` (nullable; optional).
 Relationships from this table:
-- `course_teacher.teacher_id` -> `teachers.id` (1:N).
+- `subject_teacher.teacher_id` -> `teachers.id` (1:N).
 - `institute_expenses.teacher_id` -> `teachers.id` (1:N; optional).
 - `branch_teacher.teacher_id` -> `teachers.id` (1:N).
 
 
 
-Table 2.14 — course_teacher
+Historical schema, removed by the course-module normalization migration: `course_teacher`
 | Column | Purpose |
 |---|---|
 | **`id` — PK** | Course–teacher association ID |
@@ -888,6 +926,7 @@ Table 2.17 — subjects
 | Column | Purpose |
 |---|---|
 | **`id` — PK** | Subject ID |
+| `course_id` | Owning course ID; nullable only for an unassigned module |
 | `code` | Unique subject code |
 | `name` | Subject name |
 | `description` | Subject overview, optional |
@@ -897,10 +936,11 @@ Table 2.17 — subjects
 
 Constraints and relationships
 - `code` must be unique.
-- A subject can be assigned to many courses through `course_subject`.
+- Each subject belongs to one course through `course_id` (course-to-subject 1:N).
+- A subject can be taught by many teachers through `subject_teacher`.
 
 
-Table 2.18 — course_subject
+Historical schema, removed by the course-module normalization migration: `course_subject`
 | Column | Purpose |
 |---|---|
 | `course_id` | Course receiving the subject; part of the composite primary key |
@@ -917,6 +957,20 @@ Relationships from this table:
 - Each course can have many subjects, and each subject can belong to many courses (many-to-many).
 - Deleting a course or subject removes its course-subject assignment rows, not the other linked records.
 
+
+Table 2.18 â€” subject_teacher
+| Column | Purpose |
+|---|---|
+| **`id` â€” PK** | Teacher-module assignment ID |
+| `subject_id` | Assigned course module |
+| `teacher_id` | Teacher assigned to the module |
+| `teaching_role` | Teaching role, optional |
+| `is_active` | Whether this assignment is active |
+| `notes` | Assignment notes, optional |
+| `created_at` / `updated_at` | Assignment timestamps |
+| `UNIQUE (subject_id, teacher_id)` | Prevents duplicate assignment of a teacher to a module |
+
+Foreign keys: `subject_id` -> `subjects.id` and `teacher_id` -> `teachers.id` (both cascade on delete). This pivot implements the many-to-many teacher/module relationship.
 
 3. Finance
 

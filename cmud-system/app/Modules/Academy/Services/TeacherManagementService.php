@@ -9,11 +9,11 @@ use Illuminate\Support\Facades\DB;
 /** Persistence and relationship management for Academy teacher records. */
 class TeacherManagementService
 {
-    /** Return teachers with their institute, optional staff profile, courses, and branches. */
+    /** Return teachers with their institute, optional staff profile, modules, and branches. */
     public function paginate(): LengthAwarePaginator
     {
         return Teacher::query()
-            ->with(['institute:id,name', 'staff:id,staff_code,full_name', 'subjects:id,code,name', 'branches:id,name'])
+            ->with(['institute:id,name', 'staff:id,staff_code,full_name', 'subjects:id,course_id,code,name', 'subjects.course:id,code,name', 'branches:id,name'])
             ->orderBy('full_name')
             ->paginate(25);
     }
@@ -21,7 +21,7 @@ class TeacherManagementService
     /** Return one teacher with the relationships used by the management API. */
     public function find(Teacher $teacher): Teacher
     {
-        return $teacher->load(['institute:id,name', 'staff:id,staff_code,full_name', 'subjects:id,code,name', 'branches:id,name']);
+        return $teacher->load(['institute:id,name', 'staff:id,staff_code,full_name', 'subjects:id,course_id,code,name', 'subjects.course:id,code,name', 'branches:id,name']);
     }
 
     /** @param array<string, mixed> $data */
@@ -60,10 +60,10 @@ class TeacherManagementService
         });
     }
 
-    /** Delete a teacher only when no course assignments or expenses reference it. */
+    /** Delete a teacher only when no teaching assignments or expenses reference it. */
     public function delete(Teacher $teacher): bool
     {
-        if ($teacher->courseAssignments()->exists() || $teacher->instituteExpenses()->exists()) {
+        if ($teacher->subjects()->exists() || $teacher->instituteExpenses()->exists()) {
             return false;
         }
 

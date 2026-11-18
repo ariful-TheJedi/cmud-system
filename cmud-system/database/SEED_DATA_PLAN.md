@@ -98,10 +98,9 @@ Use fake non-contactable personal data and neutral/placeholder addresses; do not
 | `communication_groups` | Op | 10–20 | Required institute; optional branch/course/batch FKs | ACA-007 |
 | `student_group_memberships` | Op/pivot | 120–220 | Required student/group FKs; pair is not unique | ACA-007 |
 | `teachers` | Op | 6 | Required institute; optional staff FK; unique teacher code | ACA-008 |
-| `course_teacher` | Op/pivot | 8–15 | Required course/teacher FKs; pair is not unique | ACA-008 |
 | `course_price_versions` | Evt | 8–16 | Course FK; optional branch/approver; scoped version-number uniqueness, no effective-date overlap check | ACA-009 |
-| `subjects` | Ref | 15–25 | Root reference table; unique subject code | ACA-008 |
-| `course_subject` | Op/pivot | 20–40 | Course/subject composite primary key | ACA-008 |
+| `subjects` | Ref | 15–25 | Module with required course FK after catalog assignment; unique subject code | ACA-008 |
+| `subject_teacher` | Op/pivot | 20–40 | Required teacher/module FKs; unique pair | ACA-008 |
 | `branch_teacher` | Op/pivot | 6–12 | Required branch/teacher FKs; unique pair (`branch_id`, `teacher_id`) | ACA-008 |
 
 ### 4.3 Finance — 16 explicitly named tables
@@ -142,10 +141,10 @@ This order is derived from migration foreign keys. Nullable edges are optional b
 
 | Phase | Tables | Required parents / notes |
 |---|---|---|
-| 1. Roots | `permission_groups`, `institutes`, `medical_colleges`, `subjects`, `stock_categories` | No application-table parents. |
+| 1. Roots | `permission_groups`, `institutes`, `medical_colleges`, `stock_categories` | No application-table parents. |
 | 2. Shared principals and references | `users`, `permissions`, `branches`, `departments`, `courses`, `asset_categories`, `student_expense_types`, `institute_expense_categories`, `payment_methods` | `users` optionally references `permission_groups`; `permissions` requires `permission_groups`; the other listed organization references require `institutes`. |
 | 3. Staff, location and catalog children | `rooms`, `staff`, `course_stages`, `batches`, `teachers`, `institute_expense_types`, `financial_accounts`, `stocks`, `certificate_templates` | Parents respectively: branch; institute and optional user; course; course+branch; institute+optional staff; category; institute+optional branch; branch; institute+optional course. |
-| 4. Price and assignment records | `staff_assignments`, `assets`, `branch_teacher`, `course_teacher`, `course_subject`, `course_price_versions`, `stock_price_versions`, `student_expense_price_versions`, `institute_expense_price_versions` | Require staff/branch/department; category/location; branch+teacher; course+teacher; course+subject; course+optional branch/user; stock+optional category/user; expense type+optional branch/course/stage/user; institute expense type+optional branch/user. |
+| 4. Price and assignment records | `staff_assignments`, `assets`, `branch_teacher`, `subject_teacher`, `course_price_versions`, `stock_price_versions`, `student_expense_price_versions`, `institute_expense_price_versions` | Require staff/branch/department; category/location; branch+teacher; module+teacher; course+optional branch/user; stock+optional category/user; expense type+optional branch/course/stage/user; institute expense type+optional branch/user. |
 | 5. Students and cohorts | `students`, `communication_groups`, `enrollments` | Students require institute+admission branch and optional college. Groups require institute and optional branch/course/batch. Enrollments require student+course+branch and optional batch. |
 | 6. Academic progression | `student_stage_records`, `exam_records`, `certificates`, `student_group_memberships` | Stage records require enrollment+course stage+batch; exams require stage record; certificates require enrollment+template; memberships require student+group. |
 | 7. Student finance | `student_tuitions`, `student_expenses` | Tuition requires enrollment+course price version and optional waiver approver. Expenses require student+branch+expense type+price version+recorder and optional enrollment, stage record and waiver approver. |
@@ -244,7 +243,7 @@ After each task, report: schema discrepancies; created/edited files; counts inse
 - **Renamed payment model:** `App\Models\Finance\StudentExpensePayment` explicitly maps to the live `student_other_payments` table. `StudentExpense::payments()`, `PaymentMethod`, `FinancialAccount`, and both `User` payment relations use that model; a focused unit test checks each relation's table and FK. Payment business calculations remain pending.
 - **Implemented behavior:** The four module API route files are stubs, with no module controllers/services/request validators found. Existing setup/demo seeders are mostly stubs. `PaymentMethodSeeder` is implemented but needs an institute row; current setup does not create one. The local application tables are empty.
 - **Constraints:** The database enforces declared primary/unique keys and foreign keys, not proposed application invariants. In particular, status/type values (except `courses.course_mode`) are strings; no amount positivity/overpayment, status transition, stock balance, effective-date overlap, academic progression, certificate eligibility or transfer ledger checks are present in migrations.
-- **Uniqueness relevant to scenarios:** `student_tuitions.enrollment_id` is unique (one tuition per enrollment); `branch_teacher` has a unique branch/teacher pair; `course_subject` has a composite PK. Membership pairs and `course_teacher` pairs are not unique. Course price versions have scope-aware partial unique indexes on version number, but no date-overlap constraint.
+- **Uniqueness relevant to scenarios:** `student_tuitions.enrollment_id` is unique (one tuition per enrollment); `branch_teacher` has a unique branch/teacher pair; `subject_teacher` has a unique subject/teacher pair. Course price versions have scope-aware partial unique indexes on version number, but no date-overlap constraint.
 - **Factories:** Four model factories already exist in the repository. The database agent instructions prohibit using or adding factories; this plan does not authorize changing or invoking them.
 - **Instruction filename:** The repository instructions are now at `database/AGENTS.md`; references use the plural filename.
 - **Readiness:** Schema inventory and FK sequencing are verified. Core seeder code is implemented but not executed; its DB integrity and rerun test must run against a separate test database after review. Seed volume targets remain proposals; business outcomes in the scenarios are not validated until their owning workflows are implemented. No factories, migrations or database records were changed.

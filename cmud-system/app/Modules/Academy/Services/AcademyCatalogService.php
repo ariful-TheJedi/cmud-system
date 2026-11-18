@@ -15,12 +15,12 @@ use Illuminate\Support\Facades\DB;
 class AcademyCatalogService
 {
     /** Return a paginated course list with the catalog relationships used by callers. */
-    public function courses(): LengthAwarePaginator
+    public function courses(int $perPage = 25): LengthAwarePaginator
     {
         return Course::query()
-            ->with(['institute:id,name', 'subjects:id,code,name', 'batches:id,course_id,branch_id,code,name,status'])
+            ->with(['institute:id,name', 'subjects:id,course_id,code,name', 'batches:id,course_id,branch_id,code,name,status'])
             ->orderBy('name')
-            ->paginate(25);
+            ->paginate($perPage);
     }
 
     /** Return a paginated batch list with its course and branch labels. */
@@ -32,11 +32,11 @@ class AcademyCatalogService
             ->paginate(25);
     }
 
-    /** Return paginated subjects together with every linked course. */
+    /** Return paginated course modules with their single owning course. */
     public function subjects(int $perPage = 25): LengthAwarePaginator
     {
         return Subject::query()
-            ->with('courses:id,code,name')
+            ->with('course:id,code,name')
             ->orderBy('name')
             ->paginate($perPage);
     }
@@ -45,13 +45,10 @@ class AcademyCatalogService
     public function createCourse(array $data): Course
     {
         return DB::transaction(function () use ($data): Course {
-            // Save the course and module links atomically so callers never see a partial catalog setup.
-            $subjectIds = $data['subject_ids'] ?? [];
-            unset($data['subject_ids']);
+            // Course creation is independent; modules are assigned through their course_id.
             $course = Course::query()->create($data);
-            $course->subjects()->sync($subjectIds);
 
-            return $course->load(['institute:id,name', 'subjects:id,code,name']);
+            return $course->load(['institute:id,name', 'subjects:id,course_id,code,name']);
         });
     }
 
@@ -59,15 +56,9 @@ class AcademyCatalogService
     public function updateCourse(Course $course, array $data): Course
     {
         return DB::transaction(function () use ($course, $data): Course {
-            // Omitted subject_ids means keep existing links; an empty array explicitly clears them.
-            $subjectIds = $data['subject_ids'] ?? null;
-            unset($data['subject_ids']);
             $course->update($data);
-            if ($subjectIds !== null) {
-                $course->subjects()->sync($subjectIds);
-            }
 
-            return $course->refresh()->load(['institute:id,name', 'subjects:id,code,name']);
+            return $course->refresh()->load(['institute:id,name', 'subjects:id,course_id,code,name']);
         });
     }
 
@@ -81,13 +72,11 @@ class AcademyCatalogService
         if ($course->stages()->exists() || $course->batches()->exists() || $course->enrollments()->exists()
             || $course->certificateTemplates()->exists() || $course->communicationGroups()->exists()
             || $course->priceVersions()->exists() || $course->studentExpensePriceVersions()->exists()
-            || $course->teacherAssignments()->exists()) {
+            || $course->subjects()->exists()) {
             return false;
         }
 
         DB::transaction(function () use ($course): void {
-            // Subject links are catalog associations and can be removed with an otherwise unused course.
-            $course->subjects()->detach();
             $course->delete();
         });
 
@@ -123,33 +112,22 @@ class AcademyCatalogService
     /** @param array<string, mixed> $data */
     public function createSubject(array $data): Subject
     {
-        // A subject may be shared across courses; course_ids defines its initial links.
-        $courseIds = $data['course_ids'] ?? [];
-        unset($data['course_ids']);
         $subject = Subject::query()->create($data);
-        $subject->courses()->sync($courseIds);
 
-        return $subject->load('courses:id,code,name');
+        return $subject->load('course:id,code,name');
     }
 
     /** @param array<string, mixed> $data */
     public function updateSubject(Subject $subject, array $data): Subject
     {
-        // Preserve links when course_ids is omitted, and sync them when explicitly supplied.
-        $courseIds = $data['course_ids'] ?? null;
-        unset($data['course_ids']);
         $subject->update($data);
-        if ($courseIds !== null) {
-            $subject->courses()->sync($courseIds);
-        }
 
-        return $subject->refresh()->load('courses:id,code,name');
+        return $subject->refresh()->load('course:id,code,name');
     }
 
     public function deleteSubject(Subject $subject): void
     {
         DB::transaction(function () use ($subject): void {
-            $subject->courses()->detach();
             $subject->delete();
         });
     }

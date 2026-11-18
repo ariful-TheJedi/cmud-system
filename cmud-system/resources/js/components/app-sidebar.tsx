@@ -1,5 +1,14 @@
 import { Link } from '@inertiajs/react';
-import { ClipboardCheck, LayoutGrid, UserRoundPlus, Settings2, Building2 } from 'lucide-react';
+import {
+    CalendarDays,
+    ClipboardCheck,
+    LayoutGrid,
+    UserRoundPlus,
+    Settings,
+    Settings2,
+    Building2,
+    Users,
+} from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -16,6 +25,7 @@ import {
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import type { NavItem } from '@/types';
+import { useCurrentUrl } from '@/hooks/use-current-url';
 
 const mainNavItems: NavItem[] = [
     {
@@ -38,11 +48,22 @@ const mainNavItems: NavItem[] = [
         href: '/academy/manage',
         icon: Settings2,
     },
+    {
+        title: 'Class routine',
+        href: '/academy/class-routine',
+        icon: CalendarDays,
+    },
 ];
 
 export function AppSidebar() {
+    const { isCurrentUrl } = useCurrentUrl();
+
     return (
-        <Sidebar collapsible="icon" variant="inset">
+        <Sidebar
+            collapsible="icon"
+            variant="inset"
+            className="2xl:left-[calc((100vw-96rem)/2)]"
+        >
             <SidebarHeader>
                 <SidebarMenu>
                     <SidebarMenuItem>
@@ -58,13 +79,33 @@ export function AppSidebar() {
             <SidebarContent>
                 <NavMain items={mainNavItems} />
                 <SidebarGroup className="mt-auto px-2 py-0">
-                    <SidebarGroupLabel>Settings</SidebarGroupLabel>
+                    <SidebarGroupLabel className="flex items-center gap-2">
+                        <Settings size={14} /> Settings
+                    </SidebarGroupLabel>
                     <SidebarMenu>
                         <SidebarMenuItem>
-                            <SidebarMenuButton asChild tooltip={{ children: 'Institute' }}>
+                            <SidebarMenuButton
+                                asChild
+                                isActive={isCurrentUrl('/settings/institute')}
+                                tooltip={{ children: 'Institute' }}
+                            >
                                 <Link href="/settings/institute" prefetch>
                                     <Building2 />
                                     <span>Institute</span>
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                            <SidebarMenuButton
+                                asChild
+                                isActive={isCurrentUrl(
+                                    '/settings/user-control',
+                                )}
+                                tooltip={{ children: 'User Control' }}
+                            >
+                                <Link href="/settings/user-control" prefetch>
+                                    <Users />
+                                    <span>User Control</span>
                                 </Link>
                             </SidebarMenuButton>
                         </SidebarMenuItem>

@@ -9,6 +9,8 @@ import Students from './pages/academy/students';
 import StudentAdmission from './pages/academy/student-admission';
 import AcademyManagement from './pages/academy/management';
 import InstituteSettings from './pages/settings/institute';
+import ClassRoutine from './pages/academy/class-routine';
+import UserControl from './pages/settings/user-control/index';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 const pages = {
@@ -22,6 +24,8 @@ const pages = {
     'academy/student-admission': StudentAdmission,
     'academy/management': AcademyManagement,
     'settings/institute': InstituteSettings,
+    'academy/class-routine': ClassRoutine,
+    'settings/user-control/index': UserControl,
 };
 
 void createInertiaApp({

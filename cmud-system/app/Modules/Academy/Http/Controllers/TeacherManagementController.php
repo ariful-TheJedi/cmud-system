@@ -40,7 +40,7 @@ class TeacherManagementController extends Controller
         return response()->json(['data' => $teachers->update($teacher, $data)]);
     }
 
-    /** Prevent deleting a teacher referenced by course assignments or institute expenses. */
+    /** Prevent deleting a teacher referenced by module assignments or institute expenses. */
     public function destroy(Teacher $teacher, TeacherManagementService $teachers): JsonResponse
     {
         if (! $teachers->delete($teacher)) {

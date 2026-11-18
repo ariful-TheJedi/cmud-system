@@ -2,15 +2,16 @@ import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import { BookOpen, BriefcaseBusiness, CalendarDays, Check, ChevronLeft, ChevronRight, Eye, GraduationCap, Layers3, LoaderCircle, Pencil, Plus, Search, Settings2, Trash2, Users, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 
 type InstituteOption = { id: number; name: string };
 type BranchOption = { id: number; institute_id: number; name: string };
 type CourseOption = { id: number; code: string; name: string; institute_id?: number };
-type SubjectOption = { id: number; code: string; name: string };
+type PickerOption = { id: number; name: string; code?: string; course?: Pick<CourseOption, 'name' | 'code'> };
+type SubjectOption = { id: number; code: string; name: string; course_id?: number; course?: CourseOption };
 type CourseRecord = CourseOption & { institute_id: number; description: string | null; duration_months: number; completion_period_months: number; course_mode: string; is_active: boolean; institute?: InstituteOption; subjects: SubjectOption[]; batches: BatchRecord[] };
 type BatchRecord = { id: number; course_id: number; branch_id: number; code: string; name: string; admission_opens_on?: string | null; admission_closes_on?: string | null; starts_on: string; expected_ends_on: string; actual_ends_on?: string | null; status: string; capacity: number | null; course?: CourseOption; branch?: BranchOption };
-type SubjectRecord = SubjectOption & { description: string | null; is_active: boolean; courses: CourseOption[] };
+type SubjectRecord = SubjectOption & { course_id: number | null; description: string | null; is_active: boolean; teachers?: Array<{ id: number; full_name: string }> };
 type SubjectAssignment = { subject_id: number; teaching_role: string; is_active: boolean; notes: string };
 type TeacherRecord = { id: number; institute_id: number; staff_id: number | null; teacher_code: string; full_name: string; phone: string; email: string | null; qualification: string | null; specialization: string | null; designation: string | null; organization: string | null; bmdc_number: string | null; address: string | null; photo_path: string | null; is_active: boolean; notes: string | null; institute?: InstituteOption; subjects: Array<SubjectOption & { pivot: { teaching_role: string | null; is_active: boolean; notes: string | null } }>; branches: BranchOption[] };
 type PageData<T> = { data: T[]; current_page: number; last_page: number; total: number };
@@ -61,11 +62,11 @@ async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
 function createForm(section: Section): FormState {
     switch (section) {
         case 'courses':
-            return { institute_id: '', code: '', name: '', description: '', duration_months: 1, completion_period_months: 1, course_mode: 'offline', is_active: true, subject_ids: [] };
+            return { institute_id: '', code: '', name: '', description: '', duration_months: 1, completion_period_months: 1, course_mode: 'offline', is_active: true };
         case 'batches':
             return { course_id: '', branch_id: '', code: '', name: '', admission_opens_on: '', admission_closes_on: '', starts_on: '', expected_ends_on: '', capacity: '', status: 'active', notes: '' };
         case 'subjects':
-            return { code: '', name: '', description: '', is_active: true, course_ids: [] };
+            return { course_id: '', code: '', name: '', description: '', is_active: true };
         case 'teachers':
             return { institute_id: '', teacher_code: '', full_name: '', phone: '', email: '', qualification: '', specialization: '', designation: '', organization: '', bmdc_number: '', address: '', is_active: true, notes: '', subject_assignments: [], branch_ids: [] };
     }
@@ -77,6 +78,8 @@ export default function AcademyManagement({ institutes, branches }: { institutes
     const [batches, setBatches] = useState<PageData<BatchRecord>>({ data: [], current_page: 1, last_page: 1, total: 0 });
     const [subjects, setSubjects] = useState<PageData<SubjectRecord>>({ data: [], current_page: 1, last_page: 1, total: 0 });
     const [teachers, setTeachers] = useState<PageData<TeacherRecord>>({ data: [], current_page: 1, last_page: 1, total: 0 });
+    const [courseOptions, setCourseOptions] = useState<CourseRecord[]>([]);
+    const [subjectOptions, setSubjectOptions] = useState<SubjectRecord[]>([]);
     const [pages, setPages] = useState<Record<Section, number>>({ courses: 1, batches: 1, subjects: 1, teachers: 1 });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -132,14 +135,30 @@ export default function AcademyManagement({ institutes, branches }: { institutes
 
     const counts: Record<Section, number> = { courses: courses.total, batches: batches.total, subjects: subjects.total, teachers: teachers.total };
 
+    async function loadCourseOptions() {
+        const page = await apiRequest<PageData<CourseRecord>>('/api/v1/academy-catalog/courses?per_page=500');
+        setCourseOptions(page.data);
+    }
+
+    async function loadSubjectOptions() {
+        const page = await apiRequest<PageData<SubjectRecord>>('/api/v1/academy-catalog/subjects?per_page=500');
+        setSubjectOptions(page.data);
+    }
+
     async function openCreate() {
         setError('');
         if (section === 'teachers') {
             try {
-                const subjectPage = await apiRequest<PageData<SubjectRecord>>('/api/v1/academy-catalog/subjects?per_page=500');
-                setSubjects(subjectPage);
+                await loadSubjectOptions();
             } catch (requestError) {
                 setError(requestError instanceof Error ? requestError.message : 'Could not load modules for teacher assignments.');
+                return;
+            }
+        } else if (section === 'subjects') {
+            try {
+                await loadCourseOptions();
+            } catch (requestError) {
+                setError(requestError instanceof Error ? requestError.message : 'Could not load courses for this module.');
                 return;
             }
         }
@@ -153,20 +172,17 @@ export default function AcademyManagement({ institutes, branches }: { institutes
             const { data } = await apiRequest<{ data: CourseRecord | BatchRecord | SubjectRecord | TeacherRecord }>(`/api/v1/academy-catalog/${section}/${id}`);
             let form: FormState;
             if (section === 'courses') {
-                // Load module choices when editing a course, even if the Modules tab was never opened.
-                const subjectPage = await apiRequest<PageData<SubjectRecord>>('/api/v1/academy-catalog/subjects');
-                setSubjects(subjectPage);
                 const course = data as CourseRecord;
-                form = { ...course, subject_ids: course.subjects.map((subject) => subject.id) };
+                form = { ...course };
             } else if (section === 'batches') {
                 const batch = data as BatchRecord;
                 form = { ...batch, admission_opens_on: dateOnly(batch.admission_opens_on), admission_closes_on: dateOnly(batch.admission_closes_on), starts_on: dateOnly(batch.starts_on), expected_ends_on: dateOnly(batch.expected_ends_on), actual_ends_on: dateOnly(batch.actual_ends_on), capacity: batch.capacity ?? '' };
             } else if (section === 'subjects') {
                 const subject = data as SubjectRecord;
-                form = { ...subject, course_ids: subject.courses.map((course) => course.id) };
+                await loadCourseOptions();
+                form = { ...subject };
             } else {
-                const subjectPage = await apiRequest<PageData<SubjectRecord>>('/api/v1/academy-catalog/subjects?per_page=500');
-                setSubjects(subjectPage);
+                await loadSubjectOptions();
                 const teacher = data as TeacherRecord;
                 form = {
                     ...teacher,
@@ -289,7 +305,7 @@ export default function AcademyManagement({ institutes, branches }: { institutes
                 </div>
             </main>
 
-            {editor && <EditorModal section={editor.section} id={editor.id} form={editor.form} institutes={institutes} branches={branches} courses={courses.data} subjects={subjects.data} saving={saving} error={error} onChange={changeField} onClose={() => setEditor(null)} onSubmit={submit} />}
+            {editor && <EditorModal section={editor.section} id={editor.id} form={editor.form} institutes={institutes} branches={branches} courses={courseOptions} subjects={subjectOptions} saving={saving} error={error} onChange={changeField} onClose={() => setEditor(null)} onSubmit={submit} />}
             {viewRecord && <RecordDetailsModal section={viewRecord.section} record={viewRecord.record} onClose={() => setViewRecord(null)} />}
         </AppLayout>
     );
@@ -299,7 +315,7 @@ function tableHeaders(section: Section): string[] {
     switch (section) {
         case 'courses': return ['Course', 'Institute', 'Duration', 'Modules', 'Status'];
         case 'batches': return ['Batch', 'Course', 'Branch', 'Starts', 'Status'];
-        case 'subjects': return ['Module / subject', 'Code', 'Courses', 'Status'];
+        case 'subjects': return ['Module / subject', 'Code', 'Course', 'Status'];
         case 'teachers': return ['Teacher', 'Institute', 'Phone', 'Modules / subjects', 'Branches'];
     }
 }
@@ -326,7 +342,7 @@ function ManagementRow({ section, record, onView, onEdit, onDelete }: { section:
         cells.push(<CellTitle key="title" title={batch.name} subtitle={batch.code} />, <span key="course" className="text-sm text-slate-600">{batch.course?.name ?? '—'}</span>, <span key="branch" className="text-sm text-slate-600">{batch.branch?.name ?? '—'}</span>, <span key="starts" className="text-sm text-slate-600">{batch.starts_on}</span>, <StatusBadge key="status" label={batch.status} active={batch.status === 'active' || batch.status === 'open'} />);
     } else if (section === 'subjects') {
         const subject = record as SubjectRecord;
-        cells.push(<CellTitle key="title" title={subject.name} subtitle={subject.description ?? 'Course module'} />, <span key="code" className="font-mono text-xs text-slate-600">{subject.code}</span>, <span key="courses" className="text-sm text-slate-600">{subject.courses?.length ?? 0} courses</span>, <StatusBadge key="status" active={subject.is_active} />);
+        cells.push(<CellTitle key="title" title={subject.name} subtitle={subject.description ?? 'Course module'} />, <span key="code" className="font-mono text-xs text-slate-600">{subject.code}</span>, <span key="course" className="text-sm text-slate-600">{subject.course?.name ?? 'Unassigned'}</span>, <StatusBadge key="status" active={subject.is_active} />);
     } else {
         const teacher = record as TeacherRecord;
         cells.push(<CellTitle key="title" title={teacher.full_name} subtitle={teacher.teacher_code} />, <span key="institute" className="text-sm text-slate-600">{teacher.institute?.name ?? '—'}</span>, <span key="phone" className="text-sm text-slate-600">{teacher.phone}</span>, <span key="subjects" className="text-sm text-slate-600">{teacher.subjects?.length ?? 0} modules / subjects</span>, <span key="branches" className="text-sm text-slate-600">{teacher.branches?.length ?? 0} branches</span>);
@@ -346,7 +362,7 @@ function RecordDetailsModal({ section, record, onClose }: { section: Section; re
         details.push(['Batch code', batch.code], ['Name', batch.name], ['Course', batch.course ? `${batch.course.name} (${batch.course.code})` : '—'], ['Branch', batch.branch?.name ?? '—'], ['Status', batch.status], ['Admission opens', dateOnly(batch.admission_opens_on) || '—'], ['Admission closes', dateOnly(batch.admission_closes_on) || '—'], ['Starts', dateOnly(batch.starts_on)], ['Expected end', dateOnly(batch.expected_ends_on)], ['Actual end', dateOnly(batch.actual_ends_on) || '—'], ['Capacity', batch.capacity?.toString() ?? '—']);
     } else if (section === 'subjects') {
         const subject = record as SubjectRecord;
-        details.push(['Module code', subject.code], ['Name', subject.name], ['Status', subject.is_active ? 'Active' : 'Inactive'], ['Description', subject.description || '—'], ['Courses', subject.courses?.map((course) => `${course.name} (${course.code})`).join(', ') || 'None']);
+        details.push(['Module code', subject.code], ['Name', subject.name], ['Course', subject.course ? `${subject.course.name} (${subject.course.code})` : 'Unassigned'], ['Status', subject.is_active ? 'Active' : 'Inactive'], ['Description', subject.description || '—'], ['Assigned teachers', subject.teachers?.map((teacher) => teacher.full_name).join(', ') || 'None']);
     } else {
         const teacher = record as TeacherRecord;
         details.push(['Teacher code', teacher.teacher_code], ['Name', teacher.full_name], ['Institute', teacher.institute?.name ?? '—'], ['Phone', teacher.phone], ['Email', teacher.email || '—'], ['Qualification', teacher.qualification || '—'], ['Specialization', teacher.specialization || '—'], ['Designation', teacher.designation || '—'], ['Organization', teacher.organization || '—'], ['BMDC number', teacher.bmdc_number || '—'], ['Status', teacher.is_active ? 'Active' : 'Inactive'], ['Branches', teacher.branches?.map((branch) => branch.name).join(', ') || 'None'], ['Notes', teacher.notes || '—']);
@@ -389,16 +405,13 @@ function CourseRelationships({ course }: { course: CourseRecord }) {
     </div>;
 }
 
-/** Shows each teacher's assigned courses together with the modules attached to those courses. */
-function TeacherCourseAssignments({ teacher }: { teacher: TeacherRecord }) {
-    const assignedCourses = teacher.courses ?? [];
+/** Shows the modules assigned directly to a teacher, including each module's course. */
+function TeacherSubjectAssignments({ teacher }: { teacher: TeacherRecord }) {
+    const assignedSubjects = teacher.subjects ?? [];
 
-    return <section aria-labelledby="teacher-course-assignments-title" className="px-6 pb-6">
-        <div className="mb-3 flex items-center justify-between gap-3"><div><h3 id="teacher-course-assignments-title" className="text-sm font-semibold text-[#17375C]">Course and module assignments</h3><p className="mt-1 text-xs text-slate-500">Modules are shown beneath each assigned course.</p></div><span className="rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-[#087586]">{assignedCourses.length} courses</span></div>
-        {assignedCourses.length ? <ul className="space-y-3">{assignedCourses.map((course) => <li key={course.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-            <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50/80 px-4 py-3"><div><p className="text-sm font-semibold text-slate-700">{course.name}</p><p className="mt-0.5 font-mono text-[11px] text-slate-500">{course.code}</p></div><div className="flex flex-wrap items-center gap-2">{course.pivot.teaching_role && <span className="rounded-full bg-white px-2.5 py-1 text-[11px] text-slate-600">{course.pivot.teaching_role}</span>}<StatusBadge label={course.pivot.is_active ? 'Assignment active' : 'Assignment inactive'} active={course.pivot.is_active} /></div></div>
-            <div className="px-4 py-3"><p className="mb-2 text-[10px] font-semibold tracking-wide text-slate-400 uppercase">Modules / subjects ({course.subjects?.length ?? 0})</p>{course.subjects?.length ? <ul className="flex flex-wrap gap-2">{course.subjects.map((module) => <li key={module.id} className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-100 bg-cyan-50/70 px-2.5 py-1.5 text-xs text-[#17636D]"><span>{module.name}</span><span className="font-mono text-[10px] text-[#087586]/70">{module.code}</span></li>)}</ul> : <p className="text-xs text-slate-500">No modules or subjects are linked to this course.</p>}</div>
-        </li>)}</ul> : <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">No course or module assignments are recorded for this teacher.</p>}
+    return <section aria-labelledby="teacher-subject-assignments-title" className="px-6 pb-6">
+        <div className="mb-3 flex items-center justify-between gap-3"><div><h3 id="teacher-subject-assignments-title" className="text-sm font-semibold text-[#17375C]">Assigned modules / subjects</h3><p className="mt-1 text-xs text-slate-500">These are the subjects assigned directly to this teacher.</p></div><span className="rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-[#087586]">{assignedSubjects.length} assigned</span></div>
+        {assignedSubjects.length ? <ul className="grid gap-3 sm:grid-cols-2">{assignedSubjects.map((subject) => <li key={subject.id} className="rounded-xl border border-slate-200 bg-white p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-700">{subject.name}</p><p className="mt-1 font-mono text-[11px] text-slate-500">{subject.code}</p><p className="mt-2 text-xs text-slate-500">Course: {subject.course?.name ?? 'Unassigned'}</p></div><StatusBadge label={subject.pivot.is_active ? 'Active' : 'Inactive'} active={subject.pivot.is_active} /></div>{subject.pivot.teaching_role && <p className="mt-3 text-xs text-slate-600">Teaching role: {subject.pivot.teaching_role}</p>}</li>)}</ul> : <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">No modules or subjects are assigned to this teacher.</p>}
     </section>;
 }
 
@@ -417,12 +430,17 @@ function EditorModal({ section, id, form, institutes, branches, courses, subject
         onChange(field, checked ? [...current, idValue] : current.filter((value) => value !== idValue));
     }
 
-    function toggleTeacherCourse(courseId: number, checked: boolean) {
-        const current = Array.isArray(form.course_assignments) ? form.course_assignments as CourseAssignment[] : [];
+    function toggleTeacherSubject(subjectId: number, checked: boolean) {
+        const current = Array.isArray(form.subject_assignments) ? form.subject_assignments as SubjectAssignment[] : [];
         const next = checked
-            ? [...current, { course_id: courseId, teaching_role: '', is_active: true, notes: '' }]
-            : current.filter((assignment) => assignment.course_id !== courseId);
-        onChange('course_assignments', next);
+            ? [...current, { subject_id: subjectId, teaching_role: '', is_active: true, notes: '' }]
+            : current.filter((assignment) => assignment.subject_id !== subjectId);
+        onChange('subject_assignments', next);
+    }
+
+    function updateTeacherSubject(subjectId: number, field: keyof SubjectAssignment, value: string | boolean) {
+        const current = Array.isArray(form.subject_assignments) ? form.subject_assignments as SubjectAssignment[] : [];
+        onChange('subject_assignments', current.map((assignment) => assignment.subject_id === subjectId ? { ...assignment, [field]: value } : assignment));
     }
 
     return <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#10233B]/55 p-4 backdrop-blur-[1px]" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -434,7 +452,6 @@ function EditorModal({ section, id, form, institutes, branches, courses, subject
                     {select('institute_id', 'Institute', institutes, true)}{input('code', 'Course code', 'text', true)}{input('name', 'Course name', 'text', true)}{input('duration_months', 'Duration in months', 'number', true, { min: '1' })}{input('completion_period_months', 'Maximum completion in months', 'number', true, { min: '1' })}
                     <SelectTextField label="Course mode" value={String(form.course_mode ?? 'offline')} options={['online', 'offline', 'dual']} onChange={(value) => onChange('course_mode', value)} />
                     <div className="sm:col-span-2">{input('description', 'Description')}</div>
-                    <div className="sm:col-span-2"><SearchableMultiSelect title="Course modules / subjects" options={subjects} selected={Array.isArray(form.subject_ids) ? form.subject_ids as number[] : []} onToggle={(subjectId, checked) => toggleId('subject_ids', subjectId, checked)} emptyText="Create subjects first to attach modules." /></div>
                     <div className="sm:col-span-2"><BooleanField label="Course is active" checked={Boolean(form.is_active)} onChange={(checked) => onChange('is_active', checked)} /></div>
                 </div>}
                 {section === 'batches' && <div className="grid gap-4 sm:grid-cols-2">
@@ -443,18 +460,22 @@ function EditorModal({ section, id, form, institutes, branches, courses, subject
                     <div className="sm:col-span-2">{input('notes', 'Notes')}</div>
                 </div>}
                 {section === 'subjects' && <div className="grid gap-4 sm:grid-cols-2">
-                    {input('code', 'Module code', 'text', true)}{input('name', 'Module / subject name', 'text', true)}<div className="sm:col-span-2">{input('description', 'Description')}</div>
-                    <div className="sm:col-span-2"><CheckList title="Linked courses" options={courses} selected={Array.isArray(form.course_ids) ? form.course_ids as number[] : []} onToggle={(courseId, checked) => toggleId('course_ids', courseId, checked)} emptyText="Create courses first to attach this module." /></div>
-                    <div className="sm:col-span-2"><BooleanField label="Module is active" checked={Boolean(form.is_active)} onChange={(checked) => onChange('is_active', checked)} /></div>
+                    {select('course_id', 'Course', courses, true)}{input('code', 'Module code', 'text', true)}{input('name', 'Module / subject name', 'text', true)}<div className="sm:col-span-2">{input('description', 'Description')}</div>
+                    <SelectTextField label="Subject status" value={form.is_active === false ? 'inactive' : 'active'} options={['active', 'inactive']} onChange={(value) => onChange('is_active', value === 'active')} />
                 </div>}
                 {section === 'teachers' && <div className="grid gap-4 sm:grid-cols-2">
                     {select('institute_id', 'Institute', institutes, true)}{input('teacher_code', 'Teacher code', 'text', true)}{input('full_name', 'Full name', 'text', true)}{input('phone', 'Phone', 'tel', true)}{input('email', 'Email', 'email')}{input('qualification', 'Qualification')}{input('specialization', 'Specialization')}{input('designation', 'Designation')}{input('organization', 'Organization')}{input('bmdc_number', 'BMDC number')}<div className="sm:col-span-2">{input('address', 'Address')}</div><div className="sm:col-span-2">{input('notes', 'Notes')}</div>
                     <div className="sm:col-span-2"><CheckList title="Branch assignments" options={branches} selected={Array.isArray(form.branch_ids) ? form.branch_ids as number[] : []} onToggle={(branchId, checked) => toggleId('branch_ids', branchId, checked)} emptyText="No branches are available." /></div>
-                    <div className="sm:col-span-2"><div className="rounded-xl border border-slate-200 bg-white p-4"><h3 className="text-xs font-semibold text-slate-700">Course assignments</h3><p className="mt-1 text-[11px] text-slate-500">Select courses and set the teacher’s role for each one.</p><div className="mt-3 space-y-2">{courses.map((course) => {
-                        const assignments = Array.isArray(form.course_assignments) ? form.course_assignments as CourseAssignment[] : [];
-                        const assignment = assignments.find((item) => item.course_id === course.id);
-                        return <div key={course.id} className="flex flex-wrap items-center gap-3 border-t border-slate-100 py-2"><label className="flex min-w-48 flex-1 items-center gap-2 text-xs text-slate-700"><input type="checkbox" checked={Boolean(assignment)} onChange={(event) => toggleTeacherCourse(course.id, event.target.checked)} className="rounded border-slate-300 text-[#087586] focus:ring-[#087586]" />{course.name} <span className="font-mono text-slate-400">{course.code}</span></label>{assignment && <input value={assignment.teaching_role} onChange={(event) => onChange('course_assignments', assignments.map((item) => item.course_id === course.id ? { ...item, teaching_role: event.target.value } : item))} placeholder="Teaching role (optional)" className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs sm:w-52" />}</div>;
-                    })}</div></div></div>
+                    <div className="sm:col-span-2"><SearchableMultiSelect title="Assigned modules / subjects" options={subjects} selected={Array.isArray(form.subject_assignments) ? (form.subject_assignments as SubjectAssignment[]).map((assignment) => assignment.subject_id) : []} onToggle={toggleTeacherSubject} emptyText="Create modules / subjects first to assign them to a teacher." /></div>
+                    {Array.isArray(form.subject_assignments) && (form.subject_assignments as SubjectAssignment[]).map((assignment) => {
+                        const module = subjects.find((subject) => subject.id === assignment.subject_id);
+                        return <div key={assignment.subject_id} className="sm:col-span-2 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+                            <div className="sm:col-span-2"><p className="text-sm font-semibold text-slate-700">{module?.name ?? 'Selected module'}</p><p className="mt-1 text-xs text-slate-500">{module?.course?.name ?? 'Course unavailable'}{module?.code ? ` · ${module.code}` : ''}</p></div>
+                            <FormInput name={`teaching_role_${assignment.subject_id}`} label="Teaching role" type="text" required={false} value={assignment.teaching_role} extra={{}} onChange={(value) => updateTeacherSubject(assignment.subject_id, 'teaching_role', value)} />
+                            <BooleanField label="Assignment is active" checked={assignment.is_active} onChange={(checked) => updateTeacherSubject(assignment.subject_id, 'is_active', checked)} />
+                            <div className="sm:col-span-2"><FormInput name={`assignment_notes_${assignment.subject_id}`} label="Assignment notes" type="text" required={false} value={assignment.notes} extra={{}} onChange={(value) => updateTeacherSubject(assignment.subject_id, 'notes', value)} /></div>
+                        </div>;
+                    })}
                     <div className="sm:col-span-2"><BooleanField label="Teacher is active" checked={Boolean(form.is_active)} onChange={(checked) => onChange('is_active', checked)} /></div>
                 </div>}
                 <footer className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-200 bg-[#F8FAFC] pt-4"><button type="button" onClick={onClose} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</button><button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-[#17375C] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#254878] disabled:opacity-60">{saving && <LoaderCircle size={15} className="animate-spin" />}{saving ? 'Saving...' : id ? 'Save changes' : 'Create record'}</button></footer>
@@ -471,18 +492,31 @@ function SelectTextField({ label, value, options, onChange }: { label: string; v
     return <label className="block text-xs font-medium text-slate-600">{label}<select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#16828D]">{options.map((option) => <option key={option} value={option}>{option.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</select></label>;
 }
 
-function CheckList({ title, options, selected, onToggle, emptyText }: { title: string; options: Array<{ id: number; name: string; code?: string }>; selected: number[]; onToggle: (id: number, checked: boolean) => void; emptyText: string }) {
+function CheckList({ title, options, selected, onToggle, emptyText }: { title: string; options: PickerOption[]; selected: number[]; onToggle: (id: number, checked: boolean) => void; emptyText: string }) {
     return <div className="rounded-xl border border-slate-200 bg-white p-4"><h3 className="text-xs font-semibold text-slate-700">{title}</h3>{options.length ? <div className="mt-3 grid max-h-48 gap-2 overflow-y-auto sm:grid-cols-2">{options.map((option) => <label key={option.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-slate-600 hover:bg-slate-50"><input type="checkbox" checked={selected.includes(option.id)} onChange={(event) => onToggle(option.id, event.target.checked)} className="rounded border-slate-300 text-[#087586] focus:ring-[#087586]" /><span className="min-w-0 truncate">{option.name}</span>{option.code && <span className="ml-auto shrink-0 font-mono text-[10px] text-slate-400">{option.code}</span>}</label>)}</div> : <p className="mt-2 text-xs text-slate-400">{emptyText}</p>}</div>;
 }
 
-/** Searchable multi-select keeps large module catalogs manageable during course edits. */
-function SearchableMultiSelect({ title, options, selected, onToggle, emptyText }: { title: string; options: Array<{ id: number; name: string; code?: string }>; selected: number[]; onToggle: (id: number, checked: boolean) => void; emptyText: string }) {
+/** Searchable multi-select keeps the module catalog manageable during teacher allocation. */
+function SearchableMultiSelect({ title, options, selected, onToggle, emptyText }: { title: string; options: PickerOption[]; selected: number[]; onToggle: (id: number, checked: boolean) => void; emptyText: string }) {
     const [search, setSearch] = useState('');
     const [open, setOpen] = useState(false);
-    const matchingOptions = options.filter((option) => `${option.name} ${option.code ?? ''}`.toLowerCase().includes(search.trim().toLowerCase()));
+    const pickerRef = useRef<HTMLDivElement>(null);
+    const matchingOptions = options.filter((option) => `${option.name} ${option.code ?? ''} ${option.course?.name ?? ''} ${option.course?.code ?? ''}`.toLowerCase().includes(search.trim().toLowerCase()));
     const selectedOptions = options.filter((option) => selected.includes(option.id));
 
-    return <div className="rounded-xl border border-slate-200 bg-white p-4">
+    useEffect(() => {
+        if (!open) return;
+
+        // Close the results when a pointer action happens outside this picker.
+        function closeOnOutsidePointer(event: PointerEvent) {
+            if (event.target instanceof Node && !pickerRef.current?.contains(event.target)) setOpen(false);
+        }
+
+        document.addEventListener('pointerdown', closeOnOutsidePointer);
+        return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
+    }, [open]);
+
+    return <div ref={pickerRef} className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="flex items-center justify-between gap-3"><div><h3 className="text-xs font-semibold text-slate-700">{title}</h3><p className="mt-1 text-[11px] text-slate-500">Search and select one or more modules.</p></div><span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">{selected.length} selected</span></div>
         <div className="relative mt-3">
             <Search size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
@@ -492,7 +526,7 @@ function SearchableMultiSelect({ title, options, selected, onToggle, emptyText }
                     const isSelected = selected.includes(option.id);
                     return <button key={option.id} type="button" role="option" aria-selected={isSelected} onMouseDown={(event) => event.preventDefault()} onClick={() => onToggle(option.id, !isSelected)} className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-cyan-50 focus:bg-cyan-50 focus:outline-none">
                         <span className={`grid h-4 w-4 shrink-0 place-items-center rounded border ${isSelected ? 'border-[#087586] bg-[#087586] text-white' : 'border-slate-300 text-transparent'}`}><Check size={12} /></span>
-                        <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{option.name}</span><span className="shrink-0 font-mono text-[10px] text-slate-400">{option.code}</span>
+                        <span className="min-w-0 flex-1"><span className="block truncate text-sm text-slate-700">{option.name}</span>{option.course && <span className="block truncate text-[10px] text-slate-400">{option.course.name}</span>}</span><span className="shrink-0 font-mono text-[10px] text-slate-400">{option.code}</span>
                     </button>;
                 }) : <p className="px-3 py-3 text-sm text-slate-500">{options.length ? 'No matching modules found.' : emptyText}</p>}
             </div>}

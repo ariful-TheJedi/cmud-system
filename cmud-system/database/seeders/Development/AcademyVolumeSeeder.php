@@ -36,7 +36,7 @@ class AcademyVolumeSeeder extends Seeder
         $batchIds = $this->seedBatches($courseIds, $branchIds);
         $this->seedCoursePrices($courseIds, $operatorId);
         $collegeIds = $this->seedColleges();
-        $subjectIds = $this->seedSubjects();
+        $subjectIds = $this->seedSubjects($courseIds);
         $teacherIds = $this->seedTeachers($instituteId, $branchIds);
         $this->seedTeachingLinks($courseIds, $subjectIds, $teacherIds);
         $studentIds = $this->seedStudents($instituteId, $branchIds, $collegeIds);
@@ -230,7 +230,7 @@ class AcademyVolumeSeeder extends Seeder
     }
 
     /** @return array<string, int> */
-    private function seedSubjects(): array
+    private function seedSubjects(array $courses): array
     {
         $subjects = [];
         foreach (DB::table('subjects')->get(['id', 'code']) as $row) {
@@ -242,10 +242,12 @@ class AcademyVolumeSeeder extends Seeder
             'Vital Signs', 'Health Assessment', 'Medical Documentation', 'Care Coordination',
             'Life Support Principles', 'Professional Practice', 'Public Health Awareness',
         ];
+        $courseIds = array_values($courses);
         foreach ($names as $index => $name) {
             $code = 'DEV-ACA-SUBJ-'.str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT);
             $saved = $this->saveRow('subjects', ['code' => $code], [
                 'name' => $name,
+                'course_id' => $courseIds[$index % count($courseIds)],
                 'description' => 'Fictional Academy reference subject for development data.',
                 'is_active' => true,
             ]);
@@ -298,38 +300,18 @@ class AcademyVolumeSeeder extends Seeder
     /** @param array<string, int> $courses @param array<string, int> $subjects @param array<int, int> $teachers */
     private function seedTeachingLinks(array $courses, array $subjects, array $teachers): void
     {
-        $links = [
-            ['DEV-COURSE-DMU', 1], ['DEV-COURSE-EMT', 2], ['DEV-COURSE-BLS', 3],
-            ['DEV-COURSE-REFRESH', 4], ['DEV-ACA-COURSE-CLINICAL-01', 5], ['DEV-ACA-COURSE-EMERGENCY-01', 1],
-        ];
-        foreach ($links as $index => [$courseCode, $teacherIndex]) {
-            $this->saveRow('course_teacher', [
-                'course_id' => $courses[$courseCode],
-                'teacher_id' => $teachers[$teacherIndex],
-            ], [
-                'teaching_role' => 'Development instructor',
-                'is_active' => true,
-                'notes' => $this->scenarioNote('SD-ACA-008-TEACHER-'.($index + 3), 'Fictional course teaching assignment.'),
-            ]);
-        }
-
-        $subjectIds = array_values($subjects);
-        $courseIds = array_values($courses);
-        $currentCount = DB::table('course_subject')->count();
-        $remaining = max(0, 20 - $currentCount);
-        $added = 0;
-        if ($remaining === 0) {
-            return;
-        }
-        foreach ($courseIds as $courseId) {
-            foreach ($subjectIds as $subjectId) {
-                if (DB::table('course_subject')->where('course_id', $courseId)->where('subject_id', $subjectId)->exists()) {
-                    continue;
-                }
-                $this->saveRow('course_subject', ['course_id' => $courseId, 'subject_id' => $subjectId], []);
-                if (++$added >= $remaining) {
-                    break 2;
-                }
+        // Assign modules directly to educators; no course-teacher links are created.
+        $teacherIds = array_values($teachers);
+        foreach (array_values($subjects) as $index => $subjectId) {
+            foreach ([$index % count($teacherIds), ($index + 1) % count($teacherIds)] as $offset => $teacherIndex) {
+                $this->saveRow('subject_teacher', [
+                    'subject_id' => $subjectId,
+                    'teacher_id' => $teacherIds[$teacherIndex],
+                ], [
+                    'teaching_role' => 'Development instructor',
+                    'is_active' => true,
+                    'notes' => $this->scenarioNote('SD-ACA-008-MODULE-'.$subjectId.'-'.$offset, 'Fictional module teaching assignment.'),
+                ]);
             }
         }
     }

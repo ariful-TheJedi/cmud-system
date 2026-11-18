@@ -15,7 +15,7 @@ use App\Modules\Academy\Http\Controllers\StudentUpdateController;
 use App\Modules\Academy\Http\Controllers\AcademyCatalogController;
 use App\Modules\Academy\Http\Controllers\TeacherManagementController;
 
-// Course CRUD includes subject_ids for syncing course modules through course_subject.
+// Courses own their module records through subjects.course_id.
 Route::prefix('academy-catalog')->name('academy.catalog.')->controller(AcademyCatalogController::class)->group(function (): void {
     Route::get('courses', 'courses')->name('courses.index');
     Route::post('courses', 'storeCourse')->name('courses.store');
@@ -30,7 +30,7 @@ Route::prefix('academy-catalog')->name('academy.catalog.')->controller(AcademyCa
     Route::put('batches/{batch}', 'updateBatch')->name('batches.update');
     Route::delete('batches/{batch}', 'destroyBatch')->name('batches.destroy');
 
-    // Subjects are reusable modules; course_ids synchronizes their many-to-many links.
+    // Each module belongs to one course and can be assigned to many teachers.
     Route::get('subjects', 'subjects')->name('subjects.index');
     Route::post('subjects', 'storeSubject')->name('subjects.store');
     Route::get('subjects/{subject}', 'showSubject')->name('subjects.show');

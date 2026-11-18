@@ -1,17 +1,19 @@
-import React from 'react';
-import UserCard from '../../components/UserCard';
+import AppLayout from '@/layouts/app-layout';
+import type { BreadcrumbItem } from '@/types';
+import { Head } from '@inertiajs/react';
+import DemoDashboard from './demo';
 
-type DashboardProps = {
-    user?: {
-        name: string;
-    };
-};
+const breadcrumbs: BreadcrumbItem[] = [
+    { title: 'Dashboard', href: '/dashboard' },
+];
 
-export default function Dashboard({ user }: DashboardProps) {
+export default function Dashboard() {
     return (
-        <div className="p-6">
-            <h1 className="mb-4 text-2xl font-bold">Dashboard</h1>
-            {user ? <UserCard name={user.name} role="Administrator" /> : null}
-        </div>
+        <AppLayout breadcrumbs={breadcrumbs}>
+            <Head title="Dashboard | CMUD" />
+            <main className="min-h-screen bg-[#F7F9FC] px-4 py-8 text-slate-800 sm:px-7 lg:px-10">
+                <DemoDashboard />
+            </main>
+        </AppLayout>
     );
 }

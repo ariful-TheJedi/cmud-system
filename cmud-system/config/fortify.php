@@ -135,7 +135,7 @@ return [
     |
     */
 
-    'views' => false,
+    'views' => true,
 
     
     /*

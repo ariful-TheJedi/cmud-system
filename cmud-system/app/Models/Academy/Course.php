@@ -6,7 +6,6 @@ use App\Models\Finance\StudentExpensePriceVersion;
 use App\Models\Institute\Institute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Course extends Model
@@ -61,23 +60,10 @@ class Course extends Model
         return $this->hasMany(CommunicationGroup::class);
     }
 
-    public function teacherAssignments(): HasMany
+    /** A course contains its module records; each subject belongs to at most one course. */
+    public function subjects(): HasMany
     {
-        return $this->hasMany(CourseTeacher::class);
-    }
-
-    public function teachers(): BelongsToMany
-    {
-        return $this->belongsToMany(Teacher::class, 'course_teacher')
-            ->withPivot(['teaching_role', 'is_active', 'notes'])
-            ->withTimestamps();
-    }
-
-    public function subjects(): BelongsToMany
-    {
-        return $this->belongsToMany(Subject::class, 'course_subject')
-            ->using(CourseSubject::class)
-            ->withTimestamps();
+        return $this->hasMany(Subject::class);
     }
 
     public function priceVersions(): HasMany

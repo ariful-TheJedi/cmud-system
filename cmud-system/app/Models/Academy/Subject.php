@@ -3,12 +3,14 @@
 namespace App\Models\Academy;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Subject extends Model
 {
     protected $fillable = [
         'code',
+        'course_id',
         'name',
         'description',
         'is_active',
@@ -21,11 +23,9 @@ class Subject extends Model
         ];
     }
 
-    public function courses(): BelongsToMany
+    public function course(): BelongsTo
     {
-        return $this->belongsToMany(Course::class, 'course_subject')
-            ->using(CourseSubject::class)
-            ->withTimestamps();
+        return $this->belongsTo(Course::class);
     }
 
     public function teachers(): BelongsToMany

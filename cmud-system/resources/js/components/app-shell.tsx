@@ -20,7 +20,9 @@ export function AppShell({ children, variant = 'sidebar' }: Props) {
 
     return (
         <TooltipProvider>
-            <SidebarProvider defaultOpen={isOpen}>{children}</SidebarProvider>
+            <div className="mx-auto w-full max-w-screen-2xl">
+                <SidebarProvider defaultOpen={isOpen}>{children}</SidebarProvider>
+            </div>
         </TooltipProvider>
     );
 }
