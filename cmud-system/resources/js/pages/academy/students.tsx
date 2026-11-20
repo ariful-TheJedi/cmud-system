@@ -1,5 +1,10 @@
 import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem } from '@/types';
+import { EnrollmentStatusDetails } from '@/pages/academy/students/components/enrollment-status-details';
+import {
+    StudentPaymentRecords,
+    type StudentPaymentRecord,
+} from '@/pages/academy/students/components/student-payment-records';
 import { Head, Link } from '@inertiajs/react';
 import {
     ChevronDown,
@@ -73,13 +78,14 @@ const emptyFilterOptions: StudentFilterOptions = {
     stages: [],
 };
 
+/** Match the snake_case relationship objects returned by the student detail API. */
 type PaymentRecord = {
     payment_number: string;
     amount: string;
     paid_at: string | null;
     status: string;
     transaction_reference: string | null;
-    payment_method: string | null;
+    payment_method: { id: number; name: string } | null;
 };
 
 type TuitionRecord = {
@@ -93,6 +99,8 @@ type TuitionRecord = {
 };
 
 type EnrollmentRecord = {
+    /** Used by each enrollment card to load its scoped overview endpoints. */
+    id: number;
     enrollment_code: string;
     enrollment_date: string;
     starts_on: string | null;
@@ -115,8 +123,8 @@ type ExpenseRecord = {
     issued_on: string;
     due_on: string | null;
     status: string;
-    expense_type: string | null;
-    branch: string | null;
+    expense_type: { id: number; name: string } | null;
+    branch: { id: number; name: string } | null;
     payments: PaymentRecord[];
 };
 
@@ -142,7 +150,7 @@ type StudentDetails = {
     admission_branch: { id?: number; name: string } | null;
     medical_college: { name: string } | null;
     enrollments: EnrollmentRecord[];
-    other_expenses: ExpenseRecord[];
+    expenses: ExpenseRecord[];
 };
 
 type StudentDetailsApiResponse = { data: StudentDetails };
@@ -738,21 +746,26 @@ function StudentDetailModal({ student, loading, error, onClose, onEdit }: { stud
                 </section>
 
                 <section className="space-y-3">
-                    <div><h3 className="text-base font-semibold text-[#1B365D]">Enrollments &amp; tuition</h3><p className="mt-1 text-xs text-slate-500">Course enrollment and tuition payment history.</p></div>
+                    <div><h3 className="text-base font-semibold text-[#1B365D]">Course enrollments</h3><p className="mt-1 text-xs text-slate-500">Academic progress, certificates, and financial summary for each course.</p></div>
                     {student.enrollments.length === 0 && <EmptyDetail>No enrollments recorded.</EmptyDetail>}
-                    {student.enrollments.map((enrollment) => <article key={enrollment.enrollment_code} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <div className="flex flex-wrap justify-between gap-3"><div><p className="font-mono text-xs text-slate-400">{enrollment.enrollment_code}</p><h4 className="mt-1 font-semibold text-[#1B365D]">{enrollment.course?.name ?? 'Course not recorded'}</h4><p className="mt-1 text-xs text-slate-500">{[enrollment.branch?.name, enrollment.batch?.name].filter(Boolean).join(' · ') || 'Branch or batch not recorded'}</p></div><StatusPill status={statusLabel(enrollment.status)} /></div>
-                        <div className="mt-4 grid gap-3 text-xs sm:grid-cols-3"><DetailField label="Enrolled" value={enrollment.enrollment_date} /><DetailField label="Starts" value={enrollment.starts_on} /><DetailField label="Expected completion" value={enrollment.expected_completion_on} /></div>
-                        {enrollment.tuition && <div className="mt-5 border-t border-slate-100 pt-4"><div className="flex flex-wrap justify-between gap-2"><div><p className="text-xs font-semibold text-slate-700">Tuition {enrollment.tuition.tuition_number}</p><p className="mt-1 text-xs text-slate-500">Issued {enrollment.tuition.issued_on}{enrollment.tuition.due_on ? ` · Due ${enrollment.tuition.due_on}` : ''}</p></div><StatusPill status={statusLabel(enrollment.tuition.status)} /></div><div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-600"><span>Amount: {formatMoney(enrollment.tuition.original_amount)}</span><span>Waiver: {formatMoney(enrollment.tuition.waiver_amount)}</span></div><PaymentHistory payments={enrollment.tuition.payments} /></div>}
-                    </article>)}
+                    {student.enrollments.map((enrollment) => (
+                        <EnrollmentStatusDetails
+                            key={enrollment.enrollment_code}
+                            enrollment={enrollment}
+                        />
+                    ))}
                 </section>
 
+                <StudentPaymentRecords
+                    payments={collectStudentPayments(student)}
+                />
+
                 <section className="space-y-3">
-                    <div><h3 className="text-base font-semibold text-[#1B365D]">Other expenses</h3><p className="mt-1 text-xs text-slate-500">Expense charges and payment history.</p></div>
-                    {student.other_expenses.length === 0 && <EmptyDetail>No other expenses recorded.</EmptyDetail>}
-                    {student.other_expenses.map((expense) => <article key={expense.expense_number} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <div className="flex flex-wrap justify-between gap-3"><div><p className="font-mono text-xs text-slate-400">{expense.expense_number}</p><h4 className="mt-1 font-semibold text-[#1B365D]">{expense.expense_type ?? expense.description}</h4><p className="mt-1 text-xs text-slate-500">{expense.branch ?? 'Branch not recorded'} · Issued {expense.issued_on}{expense.due_on ? ` · Due ${expense.due_on}` : ''}</p></div><StatusPill status={statusLabel(expense.status)} /></div>
-                        <p className="mt-3 text-sm text-slate-600">{expense.description}</p><div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-600"><span>Quantity: {expense.quantity}</span><span>Unit amount: {formatMoney(expense.unit_amount)}</span><span>Waiver: {formatMoney(expense.waiver_amount)}</span></div><PaymentHistory payments={expense.payments} />
+                    <div><h3 className="text-base font-semibold text-[#1B365D]">Other student expenses</h3><p className="mt-1 text-xs text-slate-500">Charges recorded separately from course tuition.</p></div>
+                    {student.expenses.length === 0 && <EmptyDetail>No other expenses recorded.</EmptyDetail>}
+                    {student.expenses.map((expense) => <article key={expense.expense_number} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <div className="flex flex-wrap justify-between gap-3"><div><p className="font-mono text-xs text-slate-400">{expense.expense_number}</p><h4 className="mt-1 font-semibold text-[#1B365D]">{expense.expense_type?.name ?? expense.description}</h4><p className="mt-1 text-xs text-slate-500">{expense.branch?.name ?? 'Branch not recorded'} · Issued {expense.issued_on}{expense.due_on ? ` · Due ${expense.due_on}` : ''}</p></div><StatusPill status={statusLabel(expense.status)} /></div>
+                        <p className="mt-3 text-sm text-slate-600">{expense.description}</p><div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-600"><span>Quantity: {expense.quantity}</span><span>Unit amount: {formatMoney(expense.unit_amount)}</span><span>Waiver: {formatMoney(expense.waiver_amount)}</span></div>
                     </article>)}
                 </section>
             </div>}
@@ -898,16 +911,33 @@ function DetailField({ label, value }: { label: string; value: string | null | u
     return <div><p className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">{label}</p><p className="mt-1 break-words text-sm text-slate-700">{value || '—'}</p></div>;
 }
 
-function PaymentHistory({ payments }: { payments: PaymentRecord[] }) {
-    return <div className="mt-4 border-t border-slate-100 pt-3">
-        <h5 className="text-xs font-semibold text-slate-700">Payments</h5>
-        {payments.length === 0 ? <p className="mt-2 text-xs text-slate-400">No payments recorded.</p> : <div className="mt-2 divide-y divide-slate-100">
-            {payments.map((payment) => <div key={payment.payment_number} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
-                <div><p className="font-medium text-slate-700">{payment.payment_number}</p><p className="mt-0.5 text-slate-400">{payment.paid_at ?? 'Date not recorded'}{payment.payment_method ? ` · ${payment.payment_method}` : ''}{payment.transaction_reference ? ` · Ref ${payment.transaction_reference}` : ''}</p></div>
-                <div className="flex items-center gap-2"><span className="font-semibold text-slate-700">{formatMoney(payment.amount)}</span><StatusPill status={statusLabel(payment.status)} /></div>
-            </div>)}
-        </div>}
-    </div>;
+function collectStudentPayments(student: StudentDetails): StudentPaymentRecord[] {
+    const tuitionPayments = student.enrollments.flatMap((enrollment) => {
+        const tuition = enrollment.tuition;
+        if (!tuition) return [];
+
+        return tuition.payments.map((payment) => ({
+            ...payment,
+            key: `tuition:${tuition.tuition_number}:${payment.payment_number}`,
+            payment_method: payment.payment_method?.name ?? null,
+            source: `${enrollment.course?.name ?? enrollment.enrollment_code} · Tuition ${tuition.tuition_number}`,
+        }));
+    });
+    const expensePayments = student.expenses.flatMap((expense) =>
+        expense.payments.map((payment) => ({
+            ...payment,
+            key: `expense:${expense.expense_number}:${payment.payment_number}`,
+            payment_method: payment.payment_method?.name ?? null,
+            source: `${expense.expense_type?.name ?? 'Other expense'} · ${expense.expense_number}`,
+        })),
+    );
+
+    return [...tuitionPayments, ...expensePayments].sort((first, second) => {
+        const firstDate = first.paid_at ? Date.parse(first.paid_at) : 0;
+        const secondDate = second.paid_at ? Date.parse(second.paid_at) : 0;
+
+        return secondDate - firstDate;
+    });
 }
 
 function EmptyDetail({ children }: { children: string }) {

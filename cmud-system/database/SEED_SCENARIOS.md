@@ -43,6 +43,8 @@ For a new feature, add or update scenarios here rather than adding detailed scen
 | SD-ACA-008 | Academy | Teacher, subject and course allocation | Pivot relationships are valid | DB-verified |
 | SD-ACA-009 | Academy | Course price version change | Correct fee version selected by effective date | DB-verified |
 | SD-ACA-010 | Academy | Open course batches for admission form | One active future cohort per demo course and branch | Seed code added; execution pending |
+| SD-ACA-012 | Academy | Current enrollment academic overview | Existing student enrollment has three stages, no exam attempts, and an ineligible certificate | Seed code added; execution pending |
+| SD-ACA-013 | Academy | Enrollment-generated course certificate | A second course enrollment for the current student receives a not-eligible certificate from its active course template | Seed code added; execution pending |
 | SD-FIN-001 | Finance | Fully paid tuition | Adjusted tuition minus confirmed payments = 0 | DB-verified |
 | SD-FIN-002 | Finance | Partially paid tuition | Expected positive outstanding due | DB-verified |
 | SD-FIN-003 | Finance | Waiver and installment payments | Correct adjusted tuition and payment sum | DB-verified |
@@ -156,8 +158,8 @@ The following examples define proposed inputs and outcomes, not verified busines
 
 - **Purpose:** Verify student â†’ course â†’ batch enrollment information.
 - **Tables:** `students`, `courses`, `batches`, `enrollments`.
-- **Setup:** One student with exactly one permitted enrollment in a compatible batch.
-- **Expected:** Enrollment exists exactly once and points to the intended course/batch; no duplicate course enrollment if forbidden by application rules.
+- **Setup:** One student with exactly one permitted enrollment in a compatible batch; the core Academy sample uses the `enrolled` status.
+- **Expected:** Enrollment exists exactly once and points to the intended course/batch with status `enrolled`; no duplicate course enrollment if forbidden by application rules.
 
 ### SD-ACA-003 â€” Student enrolled in two courses
 
@@ -214,6 +216,32 @@ The following examples define proposed inputs and outcomes, not verified busines
 - **Setup:** Eight active batches, one for each seeded demo course; admission is open from 2026-11-13 through 2027-02-28, with starts between March and August 2027.
 - **Expected:** Every batch points to its intended active course and branch, and the admission form can show options for multiple courses.
 - **Verify:** Seeded records and admission form options. This seeder update has not yet been executed or UI-verified.
+
+### SD-ACA-012 â€” Current enrollment academic overview
+
+- **Feature / route:** Enrollment academic overview and certificate eligibility.
+- **Purpose:** Populate academic progress and certificate status on the current student's existing enrollment.
+- **Tables:** `students`, `courses`, `course_stages`, `batches`, `enrollments`, `student_stage_records`, `exam_records`, `certificate_templates`, `certificates`.
+- **Dependencies:** Existing student `202611001`, enrollment `ENR-E3915C70-8950-418A-B55D-F898FF8E19EC`, its DMU course/batch, and the institute's certificate template.
+- **Seed records:** Three stage records with statuses completed, ongoing, and pending; no exam-attempt rows; one certificate record with status `not_eligible` and no certificate number.
+- **Expected DB state:** All stage and certificate records link to the current enrollment; no exam rows are inserted.
+- **Expected API result:** One of three stages is complete, no exam attempts are listed, and certificate eligibility is `not_eligible` because stages and enrollment remain incomplete.
+- **Expected UI behavior:** Open enrollment `ENR-E3915C70-8950-418A-B55D-F898FF8E19EC` for student `202611001`. Academic shows three stages and “No examinations recorded”; Certificates shows the certificate and its `not_eligible` status without eligibility requirement details.
+- **Verification:** Pest integration test `tests/Feature/Database/EnrollmentOverviewSeederTest.php`; manual UI verification remains pending.
+- **Rerun check:** The three stage records and certificate business key are updated without creating duplicates.
+- **Status:** Seed code added; execution pending.
+
+### SD-ACA-013 â€” Enrollment-generated course certificate
+
+- **Purpose:** Verify that enrolling the current student in a second course automatically creates its certificate record.
+- **Tables:** `students`, `courses`, `batches`, `enrollments`, `course_stages`, `student_stage_records`, `certificate_templates`, `certificates`.
+- **Dependencies:** Student `202611001`, the seeded BLS course, and an active course-specific certificate template.
+- **Seed records:** A future BLS cohort and active course-specific template, then a BLS enrollment created through `StudentEnrollmentService`.
+- **Expected DB state:** The new enrollment belongs to student `202611001`; its initial stage is created and its certificate uses the BLS template with status `not_eligible` and no certificate number.
+- **Expected UI behavior:** The student's enrollment overview shows a second BLS course card with its single-stage examination view and the automatically created certificate status.
+- **Rerun check:** The same student/course/batch enrollment and its certificate are reused; no duplicate enrollment or certificate is created.
+- **Verification:** Pest integration test `tests/Feature/Database/EnrollmentOverviewSeederTest.php` passes; seeder execution on the user's PostgreSQL database and manual UI verification remain pending.
+- **Status:** Seed code added; execution pending.
 
 ### SD-FIN-001 â€” Fully paid tuition
 
@@ -317,7 +345,7 @@ Copy this section when adding a scenario:
 
 ## 6. Scenario verification matrix
 
-All 26 scenarios have a schema-supported record shape. Schema support means tables and FK paths can represent the records; it does not verify an application workflow. The development seeders were executed and source rows were verified as recorded below. Application behavior stays **Pending** until implemented and independently verified. API routes are absent in the four module route files. Student page components exist, but no corresponding web routes/controllers were found; UI status is therefore pending/unverified, not passed.
+All 27 scenarios have a schema-supported record shape. Schema support means tables and FK paths can represent the records; it does not verify an application workflow. Existing development seeders were executed and source rows were verified as recorded below. Application behavior stays **Pending** until implemented and independently verified. API routes are absent in the four module route files. Student page components exist, but no corresponding web routes/controllers were found; UI status is therefore pending/unverified, not passed.
 
 | Scenario ID | Schema shape | Seeder code | Seed executed | DB outcome | Application behavior | API | UI | Pending behavior / note |
 |---|---|---|---|---|---|---|---|---|
@@ -336,7 +364,9 @@ All 26 scenarios have a schema-supported record shape. Schema support means tabl
 | SD-ACA-007 | Supported | Implemented | Yes | Verified | Pending | Pending | Pending | Membership rows are present; eligibility and database duplicate prevention are not implemented. |
 | SD-ACA-008 | Supported | Implemented | Yes | Verified | Pending | Pending | Pending | Course/subject and teacher links are present; allocation workflow is absent. `course_subject` has 37 rows after a first rerun exposed an additive-volume bug; further reruns are stable after correction. |
 | SD-ACA-009 | Supported | Implemented | Yes | Verified | Pending | Pending | Pending | Price rows and tuition course links are valid; effective-date selection and snapshot behavior are unimplemented. |
-| SD-ACA-010 | Supported | Implemented | Pending | Pending | Pending | Pending | Pending | Eight open future demo cohorts are defined in AcademyVolumeSeeder; not executed or UI-verified. |
+| SD-ACA-010 | Supported | Implemented | Pending | Pending | Pending | Pending | Eight open future demo cohorts are defined in AcademyVolumeSeeder; not executed or UI-verified. |
+| SD-ACA-012 | Supported | Implemented | Pending | Pending | Pending | Pending | Current student's three-stage, no-exam enrollment sample is in EnrollmentOverviewSeeder; Pest passes, but seeder execution and manual UI verification remain pending. |
+| SD-ACA-013 | Supported | Implemented | Pending | Pending | Pending | Pending | EnrollmentOverviewSeeder creates a second BLS enrollment through StudentEnrollmentService to verify automatic certificate creation; Pest passes, but seeder execution and manual UI verification remain pending. |
 | SD-FIN-001 | Supported | Implemented | Yes | Source amounts verified | Pending | Pending | Pending | Seeded full-paid source rows calculate to zero due; application aggregation remains unimplemented. |
 | SD-FIN-002 | Supported | Implemented | Yes | Source amounts verified | Pending | Pending | Pending | Seeded partial-paid source rows calculate to positive due; application due-list is unimplemented. |
 | SD-FIN-003 | Supported | Implemented | Yes | Source amounts verified | Pending | Pending | Pending | Waiver and installment source amounts reconcile; approval/payment workflow remains unimplemented. |

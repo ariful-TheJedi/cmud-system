@@ -3,27 +3,57 @@
 namespace App\Modules\Academy\Services;
 
 use App\Models\Academy\Batch;
+use App\Models\Academy\Course;
 use App\Models\Academy\Enrollment;
 use App\Models\Academy\Student;
 use App\Models\Institute\Branch;
+use App\Modules\Academy\Services\EnrollmentService\StudentEnrollmentService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class StudentAdmissionService
 {
+    public function __construct(private StudentEnrollmentService $enrollments) {}
+
     /** @param array<string, mixed> $data
      * @return array{student: Student, enrollment: Enrollment}
      */
     public function admit(array $data): array
     {
         return DB::transaction(function () use ($data): array {
-            $batch = Batch::query()->findOrFail($data['batch_id']);
-            $course = $batch->course()->firstOrFail();
-            $branch = Branch::query()->findOrFail($data['admission_branch_id']);
+            $batch = Batch::query()
+                ->whereKey((int) $data['batch_id'])
+                ->firstOrFail();
+            $course = Course::query()
+                ->whereKey($batch->course_id)
+                ->firstOrFail();
+            $branch = Branch::query()->findOrFail((int) $data['admission_branch_id']);
+
+            if ((int) $branch->institute_id !== (int) $course->institute_id) {
+                throw ValidationException::withMessages([
+                    'admission_branch_id' => 'The admission branch must belong to the batch course institute.',
+                ]);
+            }
+
+            if (! $branch->is_active) {
+                throw ValidationException::withMessages([
+                    'admission_branch_id' => 'The admission branch must be active.',
+                ]);
+            }
+
+            if ((int) $batch->branch_id !== (int) $branch->id) {
+                throw ValidationException::withMessages([
+                    'batch_id' => 'The batch must be offered at the selected admission branch.',
+                ]);
+            }
+
+            if (isset($data['course_id']) && (int) $data['course_id'] !== (int) $course->id) {
+                throw ValidationException::withMessages([
+                    'course_id' => 'The course must match the selected batch.',
+                ]);
+            }
             $admissionDate = Carbon::parse($data['admission_date'] ?? now()->toDateString());
-            $startsOn = $batch->starts_on;
-            $expectedCompletion = $startsOn->copy()->addMonths($course->completion_period_months);
             $phoneNumbers = array_values(array_unique($data['phone_numbers'] ?? array_filter([
                 $data['phone'] ?? null,
                 $data['alternative_phone'] ?? null,
@@ -47,17 +77,10 @@ class StudentAdmissionService
                 'status' => 'active',
             ]);
 
-            $enrollment = $student->enrollments()->create([
-                'enrollment_code' => 'ENR-'.Str::upper((string) Str::uuid()),
+            $enrollment = $this->enrollments->enroll($student, [
                 'course_id' => $course->id,
-                'branch_id' => $branch->id,
                 'batch_id' => $batch->id,
-                'enrollment_date' => $admissionDate,
-                'starts_on' => $startsOn,
-                'expected_completion_on' => $expectedCompletion,
-                'completion_deadline_on' => $expectedCompletion,
-                'status' => 'enrolled',
-                'is_active' => true,
+                'enrollment_date' => $admissionDate->toDateString(),
             ]);
 
             return ['student' => $student, 'enrollment' => $enrollment];

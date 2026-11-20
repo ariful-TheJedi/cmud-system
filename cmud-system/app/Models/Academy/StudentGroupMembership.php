@@ -26,11 +26,13 @@ class StudentGroupMembership extends Model
         ];
     }
 
+    /** @return BelongsTo<Student, $this> */
     public function student(): BelongsTo
     {
         return $this->belongsTo(Student::class);
     }
 
+    /** @return BelongsTo<CommunicationGroup, $this> */
     public function communicationGroup(): BelongsTo
     {
         return $this->belongsTo(CommunicationGroup::class);

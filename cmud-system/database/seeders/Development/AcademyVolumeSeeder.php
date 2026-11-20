@@ -365,7 +365,7 @@ class AcademyVolumeSeeder extends Seeder
     }
 
     /** @param array<int, int> $students @param array<string, int> $courses @param array<string, object> $batches @param array<string, int> $branches
-     *  @return list<array{code:string, student_id:int, course_id:int, batch_id:int, course_code:string, complete:bool}>
+     *  @return list<array{code:string, student_id:int, course_id:int, batch_id:int, course_code:string, complete:bool, status:string}>
      */
     private function seedEnrollments(array $students, array $courses, array $batches): array
     {
@@ -379,7 +379,8 @@ class AcademyVolumeSeeder extends Seeder
                 : $courseCodes[($number - 7) % count($courseCodes)];
             $batch = $this->primaryBatchForCourse($courseCode, $batches);
             $completed = $number <= 34;
-            $record = $this->storeEnrollment($number, 1, $students[$number], $courses[$courseCode], $courseCode, $batch, $completed);
+            $status = $completed ? 'completed' : ($number <= 44 ? 'enrolled' : 'ongoing');
+            $record = $this->storeEnrollment($number, 1, $students[$number], $courses[$courseCode], $courseCode, $batch, $completed, $status);
             $primary[$number] = $record;
             $enrollments[] = $record;
         }
@@ -394,7 +395,7 @@ class AcademyVolumeSeeder extends Seeder
             }
             $courseCode = $sameBranchCourses[($number - 7) % count($sameBranchCourses)];
             $batch = $this->primaryBatchForCourse($courseCode, $batches);
-            $record = $this->storeEnrollment($number, 2, $students[$number], $courses[$courseCode], $courseCode, $batch, false);
+            $record = $this->storeEnrollment($number, 2, $students[$number], $courses[$courseCode], $courseCode, $batch, false, 'ongoing');
             $enrollments[] = $record;
         }
 
@@ -415,9 +416,9 @@ class AcademyVolumeSeeder extends Seeder
     }
 
     /** @param array{ id:int, course_id:int, branch_id:int, starts_on:string, expected_ends_on:string } $batch
-     *  @return array{code:string, student_id:int, course_id:int, batch_id:int, course_code:string, complete:bool}
+     *  @return array{code:string, student_id:int, course_id:int, batch_id:int, course_code:string, complete:bool, status:string}
      */
-    private function storeEnrollment(int $studentNumber, int $sequence, int $studentId, int $courseId, string $courseCode, object $batch, bool $completed): array
+    private function storeEnrollment(int $studentNumber, int $sequence, int $studentId, int $courseId, string $courseCode, object $batch, bool $completed, string $status): array
     {
         $code = 'DEV-ACA-ENR-'.str_pad((string) $studentNumber, 3, '0', STR_PAD_LEFT).'-'.(string) $sequence;
         $completedOn = $completed ? $batch->expected_ends_on : null;
@@ -431,15 +432,15 @@ class AcademyVolumeSeeder extends Seeder
             'expected_completion_on' => $batch->expected_ends_on,
             'completion_deadline_on' => date('Y-m-d', strtotime($batch->expected_ends_on.' + 6 months')),
             'completed_on' => $completedOn,
-            'status' => $completed ? 'completed' : 'ongoing',
-            'is_active' => ! $completed,
+            'status' => $status,
+            'is_active' => $status !== 'completed',
             'notes' => "Fictional Academy enrollment; schema-consistent sample. [CMUD-ACADEMY:{$code}]",
         ]);
 
-        return ['id' => (int) $saved->id, 'code' => $code, 'student_id' => $studentId, 'course_id' => $courseId, 'batch_id' => $batch->id, 'course_code' => $courseCode, 'complete' => $completed];
+        return ['id' => (int) $saved->id, 'code' => $code, 'student_id' => $studentId, 'course_id' => $courseId, 'batch_id' => $batch->id, 'course_code' => $courseCode, 'complete' => $completed, 'status' => $status];
     }
 
-    /** @param list<array{code:string, student_id:int, course_id:int, batch_id:int, course_code:string, complete:bool}> $enrollments @param array<string, int> $stages @param array<string, object> $batches
+    /** @param list<array{code:string, student_id:int, course_id:int, batch_id:int, course_code:string, complete:bool, status:string}> $enrollments @param array<string, int> $stages @param array<string, object> $batches
      *  @return list<array{enrollment:array, id:int}>
      */
     private function seedStageRecords(array $enrollments, array $stages): array
@@ -457,7 +458,7 @@ class AcademyVolumeSeeder extends Seeder
                 'started_on' => $batch->starts_on,
                 'expected_completion_on' => $batch->expected_ends_on,
                 'completed_on' => $enrollment['complete'] ? $batch->expected_ends_on : null,
-                'status' => $enrollment['complete'] ? 'completed' : 'ongoing',
+                'status' => $enrollment['complete'] ? 'completed' : ($enrollment['status'] === 'enrolled' ? 'pending' : 'ongoing'),
             ]);
             $result[] = ['enrollment' => $enrollment, 'id' => (int) $saved->id];
         }
@@ -480,6 +481,9 @@ class AcademyVolumeSeeder extends Seeder
     private function seedExams(array $stageRecords): void
     {
         foreach (array_slice($stageRecords, 0, 49) as $index => $stageRecord) {
+            if ($stageRecord['enrollment']['status'] === 'enrolled') {
+                continue;
+            }
             $stage = DB::table('student_stage_records')->where('id', $stageRecord['id'])->first();
             $batch = DB::table('batches')->where('id', $stage->batch_id)->first();
             foreach ([1 => ['failed', '54.00', 'F'], 2 => ['passed', '78.00', 'B']] as $attempt => [$status, $mark, $grade]) {
@@ -490,6 +494,7 @@ class AcademyVolumeSeeder extends Seeder
                     'attempt_number' => $attempt,
                 ], [
                     'exam_date' => $examDate,
+                    'attempt_status' => 'appeared',
                     'roll_number' => 'DEV-ACA-ROLL-'.str_pad((string) ($index + 1), 3, '0', STR_PAD_LEFT),
                     'total_marks' => '100.00',
                     'obtained_marks' => $mark,
@@ -503,7 +508,7 @@ class AcademyVolumeSeeder extends Seeder
         }
     }
 
-    /** @param list<array{code:string, student_id:int, course_id:int, batch_id:int, course_code:string, complete:bool}> $enrollments */
+    /** @param list<array{code:string, student_id:int, course_id:int, batch_id:int, course_code:string, complete:bool, status:string}> $enrollments */
     private function seedCertificates(array $enrollments, int $instituteId): void
     {
         $template = $this->saveRow('certificate_templates', [

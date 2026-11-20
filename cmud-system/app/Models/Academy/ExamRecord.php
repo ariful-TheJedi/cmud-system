@@ -38,6 +38,7 @@ class ExamRecord extends Model
         ];
     }
 
+    /** @return BelongsTo<StudentStageRecord, $this> */
     public function studentStageRecord(): BelongsTo
     {
         return $this->belongsTo(StudentStageRecord::class);

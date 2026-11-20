@@ -5,6 +5,7 @@ namespace App\Models\Academy;
 use App\Enums\Academy\CertificateStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Certificate extends Model
 {
@@ -36,18 +37,28 @@ class Certificate extends Model
         ];
     }
 
+    /** @return BelongsTo<Enrollment, $this> */
     public function enrollment(): BelongsTo
     {
         return $this->belongsTo(Enrollment::class);
     }
 
+    /** @return BelongsTo<CertificateTemplate, $this> */
     public function certificateTemplate(): BelongsTo
     {
         return $this->belongsTo(CertificateTemplate::class);
     }
 
-    public function reissueRequests(): \Illuminate\Database\Eloquent\Relations\HasMany
+    /** @return HasMany<CertificateReissueRequest, $this> */
+    public function reissueRequests(): HasMany
     {
         return $this->hasMany(CertificateReissueRequest::class, 'original_certificate_id');
+    }
+
+    /** Reissue history entries where this certificate is the replacement. */
+    /** @return HasMany<CertificateReissueRequest, $this> */
+    public function replacementRequests(): HasMany
+    {
+        return $this->hasMany(CertificateReissueRequest::class, 'replacement_certificate_id');
     }
 }

@@ -113,7 +113,8 @@ class StudentAdmissionApiTest extends TestCase
         $enrollment = Enrollment::query()->where('student_id', $student->id)->firstOrFail();
 
         $this->assertSame(now()->toDateString(), $enrollment->enrollment_date->toDateString());
-        $this->assertSame('2028-03-01', $enrollment->expected_completion_on->toDateString());
+        $this->assertSame('2027-12-01', $enrollment->expected_completion_on->toDateString());
+        $this->assertSame('2028-03-01', $enrollment->completion_deadline_on->toDateString());
         $this->assertSame(1, Student::query()->where('student_code', $studentCode)->count());
         $this->assertSame(1, Enrollment::query()->where('student_id', $student->id)->count());
     }

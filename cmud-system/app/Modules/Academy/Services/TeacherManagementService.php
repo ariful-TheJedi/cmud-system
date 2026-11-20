@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 class TeacherManagementService
 {
     /** Return teachers with their institute, optional staff profile, modules, and branches. */
+    /** @return LengthAwarePaginator<int, Teacher> */
     public function paginate(): LengthAwarePaginator
     {
         return Teacher::query()
@@ -79,7 +80,7 @@ class TeacherManagementService
      * Replace subject assignment rows while preserving the pivot's teaching metadata.
      * The request validator ensures subject IDs are distinct before this method runs.
      *
-     * @param list<array{course_id:int, teaching_role?:string|null, is_active?:bool, notes?:string|null}> $assignments
+     * @param  list<array{subject_id:int, teaching_role?:string|null, is_active?:bool, notes?:string|null}>  $assignments
      */
     private function syncSubjectAssignments(Teacher $teacher, array $assignments): void
     {

@@ -173,6 +173,7 @@ database/
         ├── CoreAcademySeeder.php
         ├── AcademyFoundationSeeder.php
         ├── AcademyVolumeSeeder.php
+        ├── EnrollmentOverviewSeeder.php
         ├── CoreFinanceSeeder.php
         └── FinanceVolumeSeeder.php
 ```
@@ -180,6 +181,8 @@ database/
 `AcademyFoundationSeeder` requires the Institute anchors (`CMUD-DEV-CORE`, its three development branches, and `DEV-STAFF-002`) and the Access approver (`core.operator@example.invalid`). It fails with the missing lookup keys instead of creating those parent records. It runs `CoreAcademySeeder` followed by `AcademyVolumeSeeder`; the parent and volume seeders reject environments other than `local` and `testing`. The Academy seeder is not wired into `DatabaseSeeder`.
 
 The full development sequence is Access, Institute core, Institute volume, Academy foundation (core anchors then Academy volume), Finance core, and Finance volume. The Institute and Finance volume seeders extend only namespaced volume rows and preserve core scenario identifiers. The explicit full-core command is `php artisan db:seed --class="Database\\Seeders\\Development\\CoreDevelopmentSeeder"`; it is guarded to `local` and `testing` and is not wired into `DatabaseSeeder`. Observed execution and verification are recorded in `SEED_SCENARIOS.md`.
+
+For the academic and certificate overview on the current student, run `php artisan db:seed --class="Database\\Seeders\\Development\\EnrollmentOverviewSeeder"`. This development-only seeder adds stage records and an ineligible certificate to existing student `202611001` and enrollment `ENR-E3915C70-8950-418A-B55D-F898FF8E19EC`; it does not create another student or enrollment and is not wired into `DatabaseSeeder`.
 
 ## 7. Scenario linkage and fixed sample records
 

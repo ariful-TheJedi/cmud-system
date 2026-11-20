@@ -2,13 +2,47 @@
 
 namespace App\Modules\Academy\Services;
 
+use App\Models\Academy\Batch;
+use App\Models\Academy\Course;
+use App\Models\Academy\CourseStage;
 use App\Models\Academy\Enrollment;
 use App\Models\Academy\Student;
+use App\Models\Institute\Branch;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class StudentSearchService
 {
+    public function findByCode(string $studentCode): Student
+    {
+        return Student::query()
+            ->where('student_code', $studentCode)
+            ->firstOrFail();
+    }
+
+    public function findWithDetailsByCode(string $studentCode): Student
+    {
+        return Student::query()
+            ->where('student_code', $studentCode)
+            ->with([
+                'institute:id,name',
+                'admissionBranch:id,name',
+                'medicalCollege:id,name',
+                'enrollments' => fn ($query) => $query->orderByDesc('id'),
+                'enrollments.course:id,code,name',
+                'enrollments.branch:id,name',
+                'enrollments.batch:id,name',
+                'enrollments.tuition.payments' => fn ($query) => $query->orderByDesc('paid_at'),
+                'enrollments.tuition.payments.paymentMethod:id,name',
+                'expenses' => fn ($query) => $query->orderByDesc('id'),
+                'expenses.expenseType:id,name',
+                'expenses.branch:id,name',
+                'expenses.payments' => fn ($query) => $query->orderByDesc('paid_at'),
+                'expenses.payments.paymentMethod:id,name',
+            ])
+            ->firstOrFail();
+    }
+
     /**
      * Build a paginated-search query without joining one-to-many records into the
      * student result set. Enrollment filters use EXISTS clauses, so each student
@@ -31,6 +65,7 @@ class StudentSearchService
             if (filled($filters[$field] ?? null)) {
                 $this->applyTextFilter($query, $field, (string) $filters[$field]);
             }
+
         }
 
         if (filled($filters['search'] ?? null)) {
@@ -102,8 +137,25 @@ class StudentSearchService
             ->orderBy('id', $sortDirection);
     }
 
+    /** @return array<string, mixed> */
+    public function filterOptions(): array
+    {
+        return [
+            'courses' => Course::query()->orderBy('name')->get(['id', 'name']),
+            'batches' => Batch::query()->orderBy('name')->get(['id', 'name', 'course_id']),
+            'branches' => Branch::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name']),
+            'stages' => CourseStage::query()
+                ->where('is_active', true)
+                ->orderBy('sequence_number')
+                ->get(['id', 'name', 'course_id']),
+        ];
+    }
+
     /** @param Builder<Enrollment> $query
-     *  @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      */
     private function applyEnrollmentFilters(Builder $query, array $filters): void
     {
@@ -127,7 +179,11 @@ class StudentSearchService
             ->contains(fn (string $field): bool => isset($filters[$field]));
     }
 
-    /** Apply a partial, case-insensitive student code, name, or phone match. */
+    /**
+     * Apply a partial, case-insensitive student code, name, or phone match.
+     *
+     * @param  Builder<Student>  $query
+     */
     private function applyTextFilter(Builder $query, string $field, string $value): void
     {
         if ($field === 'name') {
@@ -145,7 +201,11 @@ class StudentSearchService
         $query->whereRaw('LOWER(student_code) LIKE ?', ['%'.mb_strtolower($value).'%']);
     }
 
-    /** Every supplied name word must occur somewhere in the full name. */
+    /**
+     * Every supplied name word must occur somewhere in the full name.
+     *
+     * @param  Builder<Student>  $query
+     */
     private function applyNameFilter(Builder $query, string $value): void
     {
         foreach (preg_split('/\s+/', trim($value), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $word) {
@@ -153,7 +213,11 @@ class StudentSearchService
         }
     }
 
-    /** Search all persisted phone representations without loading profile data. */
+    /**
+     * Search all persisted phone representations without loading profile data.
+     *
+     * @param  Builder<Student>  $query
+     */
     private function applyPhoneFilter(Builder $query, string $value): void
     {
         $pattern = '%'.mb_strtolower($value).'%';

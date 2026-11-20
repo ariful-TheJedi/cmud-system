@@ -6,6 +6,8 @@ use App\Enums\Academy\EnrollmentStatus;
 use App\Models\Finance\StudentExpense;
 use App\Models\Finance\StudentTuition;
 use App\Models\Institute\Branch;
+use Database\Factories\Academy\EnrollmentFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -13,11 +15,12 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Enrollment extends Model
 {
-    use \Illuminate\Database\Eloquent\Factories\HasFactory;
+    /** @use HasFactory<EnrollmentFactory> */
+    use HasFactory;
 
-    protected static function newFactory(): \Database\Factories\Academy\EnrollmentFactory
+    protected static function newFactory(): EnrollmentFactory
     {
-        return \Database\Factories\Academy\EnrollmentFactory::new();
+        return EnrollmentFactory::new();
     }
 
     protected $fillable = [
@@ -49,43 +52,75 @@ class Enrollment extends Model
         ];
     }
 
+    /** @return BelongsTo<Student, $this> */
     public function student(): BelongsTo
     {
         return $this->belongsTo(Student::class);
     }
 
+    /** @return BelongsTo<Course, $this> */
     public function course(): BelongsTo
     {
         return $this->belongsTo(Course::class);
     }
 
+    /** @return BelongsTo<Branch, $this> */
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
     }
 
+    /** @return BelongsTo<Batch, $this> */
     public function batch(): BelongsTo
     {
         return $this->belongsTo(Batch::class);
     }
 
+    /** @return HasMany<StudentStageRecord, $this> */
     public function stageRecords(): HasMany
     {
         return $this->hasMany(StudentStageRecord::class);
     }
 
+    /** @return HasMany<Certificate, $this> */
     public function certificates(): HasMany
     {
         return $this->hasMany(Certificate::class);
     }
 
+    /** @return HasOne<StudentTuition, $this> */
     public function tuition(): HasOne
     {
         return $this->hasOne(StudentTuition::class);
     }
 
+    /** @return HasMany<StudentExpense, $this> */
     public function expenses(): HasMany
     {
         return $this->hasMany(StudentExpense::class);
+    }
+
+    /** @return HasMany<EnrollmentHistory, $this> */
+    public function history(): HasMany
+    {
+        return $this->hasMany(EnrollmentHistory::class);
+    }
+
+    /** @return HasMany<StudentAcademicException, $this> */
+    public function academicExceptions(): HasMany
+    {
+        return $this->hasMany(StudentAcademicException::class);
+    }
+
+    /** @return HasMany<StudentCommunication, $this> */
+    public function communications(): HasMany
+    {
+        return $this->hasMany(StudentCommunication::class);
+    }
+
+    /** @return HasMany<StudentNotification, $this> */
+    public function notifications(): HasMany
+    {
+        return $this->hasMany(StudentNotification::class);
     }
 }

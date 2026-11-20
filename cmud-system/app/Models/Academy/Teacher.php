@@ -9,6 +9,7 @@ use App\Models\Institute\Staff;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Teacher extends Model
 {
@@ -37,17 +38,20 @@ class Teacher extends Model
         ];
     }
 
+    /** @return BelongsTo<Institute, $this> */
     public function institute(): BelongsTo
     {
         return $this->belongsTo(Institute::class);
     }
 
+    /** @return BelongsTo<Staff, $this> */
     public function staff(): BelongsTo
     {
         return $this->belongsTo(Staff::class);
     }
 
     /** Subjects are the direct teaching assignment targets for a teacher. */
+    /** @return BelongsToMany<Subject, $this> */
     public function subjects(): BelongsToMany
     {
         return $this->belongsToMany(Subject::class, 'subject_teacher')
@@ -55,11 +59,13 @@ class Teacher extends Model
             ->withTimestamps();
     }
 
+    /** @return BelongsToMany<Branch, $this> */
     public function branches(): BelongsToMany
     {
         return $this->belongsToMany(Branch::class, 'branch_teacher')->withTimestamps();
     }
 
+    /** @return HasMany<InstituteExpense, $this> */
     public function instituteExpenses(): HasMany
     {
         return $this->hasMany(InstituteExpense::class);

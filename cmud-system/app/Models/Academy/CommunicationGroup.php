@@ -29,26 +29,31 @@ class CommunicationGroup extends Model
         ];
     }
 
+    /** @return BelongsTo<Institute, $this> */
     public function institute(): BelongsTo
     {
         return $this->belongsTo(Institute::class);
     }
 
+    /** @return BelongsTo<Branch, $this> */
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
     }
 
+    /** @return BelongsTo<Course, $this> */
     public function course(): BelongsTo
     {
         return $this->belongsTo(Course::class);
     }
 
+    /** @return BelongsTo<Batch, $this> */
     public function batch(): BelongsTo
     {
         return $this->belongsTo(Batch::class);
     }
 
+    /** @return HasMany<StudentGroupMembership, $this> */
     public function memberships(): HasMany
     {
         return $this->hasMany(StudentGroupMembership::class);

@@ -36,29 +36,33 @@ class Batch extends Model
         ];
     }
 
+    /** @return BelongsTo<Course, $this> */
     public function course(): BelongsTo
     {
         return $this->belongsTo(Course::class);
     }
 
+    /** @return BelongsTo<Branch, $this> */
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
     }
 
+    /** @return HasMany<Enrollment, $this> */
     public function enrollments(): HasMany
     {
         return $this->hasMany(Enrollment::class);
     }
 
+    /** @return HasMany<StudentStageRecord, $this> */
     public function studentStageRecords(): HasMany
     {
         return $this->hasMany(StudentStageRecord::class);
     }
 
+    /** @return HasMany<CommunicationGroup, $this> */
     public function communicationGroups(): HasMany
     {
         return $this->hasMany(CommunicationGroup::class);
     }
-
 }

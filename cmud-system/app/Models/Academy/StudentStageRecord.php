@@ -31,28 +31,45 @@ class StudentStageRecord extends Model
         ];
     }
 
+    /** @return BelongsTo<Enrollment, $this> */
     public function enrollment(): BelongsTo
     {
         return $this->belongsTo(Enrollment::class);
     }
 
+    /** @return BelongsTo<CourseStage, $this> */
     public function courseStage(): BelongsTo
     {
         return $this->belongsTo(CourseStage::class);
     }
 
+    /** @return BelongsTo<Batch, $this> */
     public function batch(): BelongsTo
     {
         return $this->belongsTo(Batch::class);
     }
 
+    /** @return HasMany<ExamRecord, $this> */
     public function examRecords(): HasMany
     {
         return $this->hasMany(ExamRecord::class);
     }
 
+    /** @return HasMany<StudentExpense, $this> */
     public function studentExpenses(): HasMany
     {
         return $this->hasMany(StudentExpense::class);
+    }
+
+    /** @return HasMany<StudentStageHistory, $this> */
+    public function history(): HasMany
+    {
+        return $this->hasMany(StudentStageHistory::class);
+    }
+
+    /** @return HasMany<StudentAcademicException, $this> */
+    public function academicExceptions(): HasMany
+    {
+        return $this->hasMany(StudentAcademicException::class);
     }
 }

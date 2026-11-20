@@ -30,21 +30,25 @@ class CertificateReissueRequest extends Model
         ];
     }
 
+    /** @return BelongsTo<Certificate, $this> */
     public function originalCertificate(): BelongsTo
     {
         return $this->belongsTo(Certificate::class, 'original_certificate_id');
     }
 
+    /** @return BelongsTo<Certificate, $this> */
     public function replacementCertificate(): BelongsTo
     {
         return $this->belongsTo(Certificate::class, 'replacement_certificate_id');
     }
 
+    /** @return BelongsTo<User, $this> */
     public function requester(): BelongsTo
     {
         return $this->belongsTo(User::class, 'requested_by');
     }
 
+    /** @return BelongsTo<User, $this> */
     public function decisionMaker(): BelongsTo
     {
         return $this->belongsTo(User::class, 'decided_by');

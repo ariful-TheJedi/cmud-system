@@ -231,7 +231,7 @@ class CoreAcademySeeder extends Seeder
 
         $enrollments = [];
         foreach ([
-            ['code' => 'DEV-CORE-ENR-002', 'student' => 'DEV-CORE-STU-002', 'course' => 'DEV-COURSE-EMT', 'batch' => 'DEV-BATCH-EMT-01', 'status' => 'ongoing', 'complete' => null],
+            ['code' => 'DEV-CORE-ENR-002', 'student' => 'DEV-CORE-STU-002', 'course' => 'DEV-COURSE-EMT', 'batch' => 'DEV-BATCH-EMT-01', 'status' => 'enrolled', 'complete' => null],
             ['code' => 'DEV-CORE-ENR-003-A', 'student' => 'DEV-CORE-STU-003', 'course' => 'DEV-COURSE-BLS', 'batch' => 'DEV-BATCH-BLS-01', 'status' => 'ongoing', 'complete' => null],
             ['code' => 'DEV-CORE-ENR-003-B', 'student' => 'DEV-CORE-STU-003', 'course' => 'DEV-COURSE-EMT', 'batch' => 'DEV-BATCH-EMT-01', 'status' => 'ongoing', 'complete' => null],
             ['code' => 'DEV-CORE-ENR-004', 'student' => 'DEV-CORE-STU-004', 'course' => 'DEV-COURSE-DMU', 'batch' => 'DEV-BATCH-DMU-01', 'status' => 'ongoing', 'complete' => null],
@@ -287,6 +287,7 @@ class CoreAcademySeeder extends Seeder
                 'attempt_number' => $exam['attempt'],
             ], [
                 'exam_date' => $exam['attempt'] === 1 ? '2026-04-01' : '2026-05-01',
+                'attempt_status' => 'appeared',
                 'roll_number' => 'DEV-ROLL-004',
                 'total_marks' => '100.00',
                 'obtained_marks' => $exam['obtained'],

@@ -1,8 +1,8 @@
 <?php
 
-use App\Modules\Academy\Http\Controllers\AcademyManagementPageController;
-use App\Modules\Academy\Http\Controllers\StudentAdmissionController;
-use App\Modules\Academy\Http\Controllers\StudentAdmissionPageController;
+use App\Modules\Academy\Controllers\AcademyManagementPageController;
+use App\Modules\Academy\Controllers\StudentAdmissionController;
+use App\Modules\Academy\Controllers\StudentAdmissionPageController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 

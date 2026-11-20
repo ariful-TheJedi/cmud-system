@@ -44,7 +44,6 @@ class StudentListApiTest extends TestCase
         ]);
 
         $response = $this->getJson('/api/v1/students?page=1&per_page=15&include_filters=1&sort_by=created_at&sort_direction=desc');
-
         $response
             ->assertOk()
             ->assertJsonPath('data.0.student_code', 'STU-LIST-0001')
