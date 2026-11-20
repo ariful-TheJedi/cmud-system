@@ -107,7 +107,7 @@ class StudentAdmissionApiTest extends TestCase
             'course_id' => $course->id,
             'branch_id' => $branch->id,
             'batch_id' => $batch->id,
-            'status' => 'active',
+            'status' => 'enrolled',
         ]);
 
         $enrollment = Enrollment::query()->where('student_id', $student->id)->firstOrFail();

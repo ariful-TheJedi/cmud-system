@@ -51,7 +51,7 @@ class StudentSearchRequest extends FormRequest
             'admission_date' => ['sometimes', 'date'],
             'admission_month' => ['sometimes', 'integer', 'between:1,12'],
             'admission_year' => ['sometimes', 'integer', 'between:1900,2100'],
-            'student_status' => ['sometimes', Rule::in(['active', 'inactive', 'blocked'])],
+            'student_status' => ['sometimes', Rule::in(['registered', 'active', 'deactivated', 'suspended'])],
             'enrollment_status' => ['sometimes', Rule::in(['active', 'enrolled', 'ongoing', 'on hold', 'completed', 'withdrawn', 'cancelled', 'none'])],
             'institute_id' => ['sometimes', 'integer', 'exists:institutes,id'],
             'branch_id' => ['sometimes', 'integer', 'exists:branches,id'],

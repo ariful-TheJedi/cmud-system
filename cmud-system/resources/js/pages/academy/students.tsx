@@ -2,20 +2,15 @@ import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import {
-    BookOpen,
     ChevronDown,
     ChevronLeft,
     ChevronRight,
     CircleHelp,
-    ClipboardList,
     GraduationCap,
     Search,
     SlidersHorizontal,
-    UserRound,
     UserPlus,
-    Users,
     X,
-    type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 
@@ -441,10 +436,6 @@ export default function Students() {
         setPage(1);
     }
 
-    const activeCount = students.filter((student) => student.status.toLowerCase() === 'active').length;
-    const registeredCount = students.filter((student) => student.status.toLowerCase() === 'registered').length;
-    const courseCount = new Set(students.map((student) => student.course).filter((course) => course !== '—')).size;
-
     function clearFilters() {
         setSearch('');
         setDebouncedSearch('');
@@ -521,13 +512,6 @@ export default function Students() {
                     </div>
 
                     {loadError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{loadError}</div>}
-
-                    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                        <SummaryCard icon={Users} label="Total students" value={String(pagination.total).padStart(2, '0')} note="All records" color="teal" />
-                        <SummaryCard icon={UserRound} label="Active on page" value={String(activeCount).padStart(2, '0')} note="Current page" color="blue" />
-                        <SummaryCard icon={ClipboardList} label="Registered on page" value={String(registeredCount).padStart(2, '0')} note="Current page" color="violet" />
-                        <SummaryCard icon={BookOpen} label="Courses on page" value={String(courseCount).padStart(2, '0')} note="Current page" color="navy" />
-                    </section>
 
                     <section className="overflow-hidden rounded-[22px] border border-slate-200/80 bg-white shadow-sm">
                         <div className="border-b border-slate-100 p-5 sm:p-6">
@@ -692,11 +676,6 @@ function StudentsPagePreloader() {
             </div>
         </main>
     );
-}
-
-function SummaryCard({ icon: Icon, label, value, note, color }: { icon: LucideIcon; label: string; value: string; note: string; color: string }) {
-    const styles: Record<string, string> = { teal: 'bg-[#E7F4F4] text-[#008295]', blue: 'bg-[#E9F4FB] text-[#00A3E0]', violet: 'bg-[#F1EDFA] text-[#7B61A8]', navy: 'bg-[#EDF1F7] text-[#1B365D]' };
-    return <div className="rounded-[18px] border border-slate-200/80 bg-white p-5 shadow-sm"><span className={`grid h-10 w-10 place-items-center rounded-xl ${styles[color]}`}><Icon size={19} /></span><div className="mt-4 flex items-end justify-between"><div><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold tracking-tight text-[#1B365D]">{value}</p></div><p className="pb-1 text-[11px] text-slate-400">{note}</p></div></div>;
 }
 
 /** Keep filter labels and select styling consistent across the student registry. */

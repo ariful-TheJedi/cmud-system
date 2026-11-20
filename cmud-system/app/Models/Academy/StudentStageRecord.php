@@ -2,6 +2,7 @@
 
 namespace App\Models\Academy;
 
+use App\Enums\Academy\StudentStageStatus;
 use App\Models\Finance\StudentExpense;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -26,6 +27,7 @@ class StudentStageRecord extends Model
             'started_on' => 'date',
             'expected_completion_on' => 'date',
             'completed_on' => 'date',
+            'status' => StudentStageStatus::class,
         ];
     }
 

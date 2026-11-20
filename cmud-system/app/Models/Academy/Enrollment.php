@@ -2,6 +2,7 @@
 
 namespace App\Models\Academy;
 
+use App\Enums\Academy\EnrollmentStatus;
 use App\Models\Finance\StudentExpense;
 use App\Models\Finance\StudentTuition;
 use App\Models\Institute\Branch;
@@ -44,6 +45,7 @@ class Enrollment extends Model
             'completion_deadline_on' => 'date',
             'completed_on' => 'date',
             'is_active' => 'boolean',
+            'status' => EnrollmentStatus::class,
         ];
     }
 

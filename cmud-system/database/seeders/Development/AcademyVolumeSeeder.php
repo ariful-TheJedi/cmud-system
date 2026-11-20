@@ -431,7 +431,7 @@ class AcademyVolumeSeeder extends Seeder
             'expected_completion_on' => $batch->expected_ends_on,
             'completion_deadline_on' => date('Y-m-d', strtotime($batch->expected_ends_on.' + 6 months')),
             'completed_on' => $completedOn,
-            'status' => $completed ? 'completed' : 'active',
+            'status' => $completed ? 'completed' : 'ongoing',
             'is_active' => ! $completed,
             'notes' => "Fictional Academy enrollment; schema-consistent sample. [CMUD-ACADEMY:{$code}]",
         ]);
@@ -457,7 +457,7 @@ class AcademyVolumeSeeder extends Seeder
                 'started_on' => $batch->starts_on,
                 'expected_completion_on' => $batch->expected_ends_on,
                 'completed_on' => $enrollment['complete'] ? $batch->expected_ends_on : null,
-                'status' => $enrollment['complete'] ? 'completed' : 'in_progress',
+                'status' => $enrollment['complete'] ? 'completed' : 'ongoing',
             ]);
             $result[] = ['enrollment' => $enrollment, 'id' => (int) $saved->id];
         }

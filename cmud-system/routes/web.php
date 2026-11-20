@@ -9,7 +9,7 @@ use Inertia\Inertia;
 require __DIR__.'/pages/dashboard.php';
 require __DIR__.'/settings.php';
 
-Route::inertia('/', 'welcome')->name('home');
+Route::redirect('/', '/dashboard')->name('home');
 
 Route::redirect('/academy', '/academy/students')->name('academy.index');
 

@@ -41,7 +41,10 @@ return [
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
-            'url' => rtrim((string) env('APP_URL', 'http://localhost'), '/').'/storage',
+            'url' => rtrim((string) env(
+                'MEDIA_FILE_PREFIX',
+                rtrim((string) env('APP_URL', 'http://localhost'), '/').'/storage',
+            ), '/'),
             'visibility' => 'public',
             'throw' => false,
             'report' => false,

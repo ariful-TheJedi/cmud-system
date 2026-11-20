@@ -56,7 +56,7 @@ class StudentAdmissionService
                 'starts_on' => $startsOn,
                 'expected_completion_on' => $expectedCompletion,
                 'completion_deadline_on' => $expectedCompletion,
-                'status' => 'active',
+                'status' => 'enrolled',
                 'is_active' => true,
             ]);
 

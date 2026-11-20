@@ -2,6 +2,7 @@
 
 namespace App\Models\Academy;
 
+use App\Enums\Academy\StudentStatus;
 use App\Models\Finance\StudentExpense;
 use App\Models\Institute\Branch;
 use App\Models\Institute\Institute;
@@ -55,6 +56,7 @@ class Student extends Model
             'graduation_year' => 'integer',
             'documents' => 'array',
             'phone_numbers' => 'array',
+            'status' => StudentStatus::class,
         ];
     }
 

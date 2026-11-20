@@ -92,19 +92,19 @@ class CoreAcademySeeder extends Seeder
             $batches[$batch['code']] = (int) $saved->id;
         }
 
-        // Keep one deterministic inactive profile available for registry filter checks.
+        // Keep one deterministic deactivated profile available for registry filter checks.
         $this->saveRow('students', ['student_code' => 'DEV-ACA-INACTIVE-001'], [
             'institute_id' => $instituteId,
             'admission_branch_id' => $dhakaBranchId,
             'admission_date' => '2025-02-10',
-            'full_name' => 'Demo Inactive Student',
+            'full_name' => 'Demo Deactivated Student',
             'father_name' => 'Demo Guardian Inactive 001',
             'mother_name' => 'Demo Parent Inactive 001',
             'date_of_birth' => '2001-06-15',
             'gender' => 'female',
             'phone' => '+880000009999',
             'alternative_phone' => null,
-            'email' => 'inactive.student.001@example.invalid',
+            'email' => 'deactivated.student.001@example.invalid',
             'present_address' => 'Fictional Dhaka area, Bangladesh 0000',
             'permanent_address' => 'Fictional district address, Bangladesh 0000',
             'medical_college_id' => $college->id,
@@ -113,8 +113,8 @@ class CoreAcademySeeder extends Seeder
             'bmdc_number' => null,
             'photo_path' => null,
             'documents' => json_encode([], JSON_THROW_ON_ERROR),
-            'status' => 'inactive',
-            'notes' => 'Fictional inactive student for Academy registry filter checks.',
+            'status' => 'deactivated',
+            'notes' => 'Fictional deactivated student for Academy registry filter checks.',
         ]);
 
         $teacher = $this->saveRow('teachers', ['teacher_code' => 'DEV-TEACHER-001'], [
@@ -200,7 +200,7 @@ class CoreAcademySeeder extends Seeder
             ['code' => 'DEV-CORE-STU-002', 'name' => 'Imran Hossain', 'branch' => $dhakaBranchId, 'status' => 'active'],
             ['code' => 'DEV-CORE-STU-003', 'name' => 'Maliha Sultana', 'branch' => $chattogramBranchId, 'status' => 'active'],
             ['code' => 'DEV-CORE-STU-004', 'name' => 'Rafiq Hasan', 'branch' => $dhakaBranchId, 'status' => 'active'],
-            ['code' => 'DEV-CORE-STU-005', 'name' => 'Farzana Karim', 'branch' => $dhakaBranchId, 'status' => 'completed'],
+            ['code' => 'DEV-CORE-STU-005', 'name' => 'Farzana Karim', 'branch' => $dhakaBranchId, 'status' => 'suspended'],
             ['code' => 'DEV-CORE-STU-006', 'name' => 'Tanvir Islam', 'branch' => $chattogramBranchId, 'status' => 'active'],
         ] as $index => $student) {
             $saved = $this->saveRow('students', ['student_code' => $student['code']], [
@@ -231,13 +231,13 @@ class CoreAcademySeeder extends Seeder
 
         $enrollments = [];
         foreach ([
-            ['code' => 'DEV-CORE-ENR-002', 'student' => 'DEV-CORE-STU-002', 'course' => 'DEV-COURSE-EMT', 'batch' => 'DEV-BATCH-EMT-01', 'status' => 'active', 'complete' => null],
-            ['code' => 'DEV-CORE-ENR-003-A', 'student' => 'DEV-CORE-STU-003', 'course' => 'DEV-COURSE-BLS', 'batch' => 'DEV-BATCH-BLS-01', 'status' => 'active', 'complete' => null],
-            ['code' => 'DEV-CORE-ENR-003-B', 'student' => 'DEV-CORE-STU-003', 'course' => 'DEV-COURSE-EMT', 'batch' => 'DEV-BATCH-EMT-01', 'status' => 'active', 'complete' => null],
-            ['code' => 'DEV-CORE-ENR-004', 'student' => 'DEV-CORE-STU-004', 'course' => 'DEV-COURSE-DMU', 'batch' => 'DEV-BATCH-DMU-01', 'status' => 'active', 'complete' => null],
+            ['code' => 'DEV-CORE-ENR-002', 'student' => 'DEV-CORE-STU-002', 'course' => 'DEV-COURSE-EMT', 'batch' => 'DEV-BATCH-EMT-01', 'status' => 'ongoing', 'complete' => null],
+            ['code' => 'DEV-CORE-ENR-003-A', 'student' => 'DEV-CORE-STU-003', 'course' => 'DEV-COURSE-BLS', 'batch' => 'DEV-BATCH-BLS-01', 'status' => 'ongoing', 'complete' => null],
+            ['code' => 'DEV-CORE-ENR-003-B', 'student' => 'DEV-CORE-STU-003', 'course' => 'DEV-COURSE-EMT', 'batch' => 'DEV-BATCH-EMT-01', 'status' => 'ongoing', 'complete' => null],
+            ['code' => 'DEV-CORE-ENR-004', 'student' => 'DEV-CORE-STU-004', 'course' => 'DEV-COURSE-DMU', 'batch' => 'DEV-BATCH-DMU-01', 'status' => 'ongoing', 'complete' => null],
             ['code' => 'DEV-CORE-ENR-005', 'student' => 'DEV-CORE-STU-005', 'course' => 'DEV-COURSE-REFRESH', 'batch' => 'DEV-BATCH-REFRESH-01', 'status' => 'completed', 'complete' => '2025-09-01'],
             ['code' => 'DEV-CORE-ENR-005-B', 'student' => 'DEV-CORE-STU-005', 'course' => 'DEV-COURSE-BLS', 'batch' => 'DEV-BATCH-BLS-01', 'status' => 'completed', 'complete' => '2025-10-01'],
-            ['code' => 'DEV-CORE-ENR-006', 'student' => 'DEV-CORE-STU-006', 'course' => 'DEV-COURSE-REFRESH', 'batch' => 'DEV-BATCH-REFRESH-01', 'status' => 'active', 'complete' => null],
+            ['code' => 'DEV-CORE-ENR-006', 'student' => 'DEV-CORE-STU-006', 'course' => 'DEV-COURSE-REFRESH', 'batch' => 'DEV-BATCH-REFRESH-01', 'status' => 'ongoing', 'complete' => null],
         ] as $enrollment) {
             $courseId = $courses[$enrollment['course']];
             $saved = $this->saveRow('enrollments', ['enrollment_code' => $enrollment['code']], [
@@ -261,7 +261,7 @@ class CoreAcademySeeder extends Seeder
         foreach ([
             ['key' => 'DMU-1', 'enrollment' => 'DEV-CORE-ENR-004', 'stage' => 'DEV-DMU-STAGE-1', 'batch' => 'DEV-BATCH-DMU-01', 'status' => 'completed', 'start' => '2025-01-15', 'end' => '2025-07-15'],
             ['key' => 'DMU-2', 'enrollment' => 'DEV-CORE-ENR-004', 'stage' => 'DEV-DMU-STAGE-2', 'batch' => 'DEV-BATCH-DMU-01', 'status' => 'completed', 'start' => '2025-07-16', 'end' => '2026-01-15'],
-            ['key' => 'DMU-3', 'enrollment' => 'DEV-CORE-ENR-004', 'stage' => 'DEV-DMU-STAGE-3', 'batch' => 'DEV-BATCH-DMU-01', 'status' => 'in_progress', 'start' => '2026-01-16', 'end' => null],
+            ['key' => 'DMU-3', 'enrollment' => 'DEV-CORE-ENR-004', 'stage' => 'DEV-DMU-STAGE-3', 'batch' => 'DEV-BATCH-DMU-01', 'status' => 'ongoing', 'start' => '2026-01-16', 'end' => null],
             ['key' => 'REFRESH-5', 'enrollment' => 'DEV-CORE-ENR-005', 'stage' => 'DEV-REFRESH-STAGE-1', 'batch' => 'DEV-BATCH-REFRESH-01', 'status' => 'completed', 'start' => '2025-05-01', 'end' => '2025-09-01'],
         ] as $stageRecord) {
             $note = $this->scenarioNote('SD-ACA-004-'.$stageRecord['key'], 'Fictional stage record; progression validation is pending.');

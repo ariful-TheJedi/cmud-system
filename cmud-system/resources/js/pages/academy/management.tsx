@@ -316,7 +316,7 @@ function tableHeaders(section: Section): string[] {
         case 'courses': return ['Course', 'Institute', 'Duration', 'Modules', 'Status'];
         case 'batches': return ['Batch', 'Course', 'Branch', 'Starts', 'Status'];
         case 'subjects': return ['Module / subject', 'Code', 'Course', 'Status'];
-        case 'teachers': return ['Teacher', 'Institute', 'Phone', 'Modules / subjects', 'Branches'];
+        case 'teachers': return ['Teacher', 'Status', 'Phone', 'Modules / subjects', 'Branches'];
     }
 }
 
@@ -345,7 +345,7 @@ function ManagementRow({ section, record, onView, onEdit, onDelete }: { section:
         cells.push(<CellTitle key="title" title={subject.name} subtitle={subject.description ?? 'Course module'} />, <span key="code" className="font-mono text-xs text-slate-600">{subject.code}</span>, <span key="course" className="text-sm text-slate-600">{subject.course?.name ?? 'Unassigned'}</span>, <StatusBadge key="status" active={subject.is_active} />);
     } else {
         const teacher = record as TeacherRecord;
-        cells.push(<CellTitle key="title" title={teacher.full_name} subtitle={teacher.teacher_code} />, <span key="institute" className="text-sm text-slate-600">{teacher.institute?.name ?? '—'}</span>, <span key="phone" className="text-sm text-slate-600">{teacher.phone}</span>, <span key="subjects" className="text-sm text-slate-600">{teacher.subjects?.length ?? 0} modules / subjects</span>, <span key="branches" className="text-sm text-slate-600">{teacher.branches?.length ?? 0} branches</span>);
+        cells.push(<CellTitle key="title" title={teacher.full_name} subtitle={teacher.teacher_code} />, <StatusBadge key="status" active={teacher.is_active} />, <span key="phone" className="text-sm text-slate-600">{teacher.phone}</span>, <span key="subjects" className="text-sm text-slate-600">{teacher.subjects?.length ?? 0} modules / subjects</span>, <span key="branches" className="text-sm text-slate-600">{teacher.branches?.length ?? 0} branches</span>);
     }
 
     return <tr className="transition hover:bg-slate-50/70">{cells.map((cell, index) => <td key={index} className="px-5 py-4">{cell}</td>)}<td className="px-5 py-4"><div className="flex justify-end gap-1"><button type="button" onClick={onView} aria-label="View record" className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-[#087586] hover:bg-cyan-50"><Eye size={14} /> View</button><button type="button" onClick={onEdit} aria-label="Edit record" className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-cyan-50 hover:text-[#087586]"><Pencil size={15} /></button><button type="button" onClick={onDelete} aria-label="Delete record" className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button></div></td></tr>;

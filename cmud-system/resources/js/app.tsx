@@ -1,6 +1,5 @@
 ﻿import { createInertiaApp } from '@inertiajs/react';
 import NotFound from './pages/errors/404';
-import Welcome from './pages/welcome';
 import Dashboard from './pages/dashboard/index';
 import SecuritySettings from './pages/security/settings/security';
 import SecurityProfile from './pages/security/settings/profile';
@@ -12,9 +11,8 @@ import InstituteSettings from './pages/settings/institute';
 import ClassRoutine from './pages/academy/class-routine';
 import UserControl from './pages/settings/user-control/index';
 
-const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+const appName = import.meta.env.VITE_APP_NAME || 'CMUD System';
 const pages = {
-    welcome: Welcome,
     'errors/404': NotFound,
     dashboard: Dashboard,
     'security/settings/security': SecuritySettings,

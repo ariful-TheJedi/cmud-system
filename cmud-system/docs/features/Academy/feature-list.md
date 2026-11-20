@@ -154,13 +154,10 @@ Allocate classrooms using existing room records from the Institute & Branches mo
 Original: FTR095  
 Maintain academic teacher information and teaching availability.
 
-**FTR-SAM-07-004 — Teaching Assignment History**  
-Original: FTR096  
-Preserve historical teacher assignments and authorized changes.
 
 ---
 
-## FTR-SAM-08 — Class Routine & Academic Operations
+## FTR-SAM-08 — Class Routine & Academic Operations (future development)
 
 **FTR-SAM-08-001 — Class Routines**  
 Original: FTR028  
@@ -185,7 +182,7 @@ Record student attendance for individual classes and provide attendance summarie
 
 ---
 
-## FTR-SAM-09 — Examination & Results
+## FTR-SAM-09 — Examination & Results(no need manual upload)
 
 **FTR-SAM-09-001 — Manual Exam Completion**  
 Original: FTR029  
@@ -213,7 +210,7 @@ Maintain traceability of important examination record modifications.
 
 ---
 
-## FTR-SAM-10 — Certificate Management
+## FTR-SAM-10 — Certificate Management (future later)
 
 **FTR-SAM-10-001 — Certificate Coordination**  
 Original: FTR030  
@@ -361,8 +358,3 @@ A feature can be marked complete only when:
 - End-to-end user workflows are verified.
 
 ---
-
-**Document Status:** Draft — Ready for Requirements Review  
-**Functional Groups:** 12  
-**Feature Entries:** 63  
-**Next Activity:** Review feature priorities, merge overlapping implementation scope, and map approved features to the existing database schema.
