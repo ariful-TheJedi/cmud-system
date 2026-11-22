@@ -1,17 +1,17 @@
 <?php
 
-use App\Modules\Academy\Controllers\AcademicProgressController;
-use App\Modules\Academy\Controllers\AcademyCatalogController;
-use App\Modules\Academy\Controllers\CertificateOverviewController;
-use App\Modules\Academy\Controllers\EnrollmentController;
-use App\Modules\Academy\Controllers\StudentAcademicOverviewController;
-use App\Modules\Academy\Controllers\StudentAdmissionController;
-use App\Modules\Academy\Controllers\StudentCommunicationController;
-use App\Modules\Academy\Controllers\StudentController;
-use App\Modules\Academy\Controllers\StudentEnrollmentController;
-use App\Modules\Academy\Controllers\StudentNotificationController;
-use App\Modules\Academy\Controllers\StudentUpdateController;
-use App\Modules\Academy\Controllers\TeacherManagementController;
+use App\Modules\Academy\Controllers\AcademicProgress\AcademicProgressController;
+use App\Modules\Academy\Controllers\AcademicProgress\StudentAcademicOverviewController;
+use App\Modules\Academy\Controllers\Admissions\StudentAdmissionController;
+use App\Modules\Academy\Controllers\Catalog\AcademyCatalogController;
+use App\Modules\Academy\Controllers\Certificates\CertificateOverviewController;
+use App\Modules\Academy\Controllers\Communications\StudentCommunicationController;
+use App\Modules\Academy\Controllers\Communications\StudentNotificationController;
+use App\Modules\Academy\Controllers\Enrollments\EnrollmentController;
+use App\Modules\Academy\Controllers\Enrollments\StudentEnrollmentController;
+use App\Modules\Academy\Controllers\Students\StudentController;
+use App\Modules\Academy\Controllers\Students\StudentUpdateController;
+use App\Modules\Academy\Controllers\Teachers\TeacherManagementController;
 use App\Modules\Finance\Controllers\StudentFinancialOverviewController;
 use App\Modules\Finance\Controllers\StudentPaymentHistoryController;
 use Illuminate\Support\Facades\Route;

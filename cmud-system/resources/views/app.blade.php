@@ -31,9 +31,9 @@
             }
         </style>
 
-        <link rel="icon" href="/favicon.ico" sizes="any">
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+        {{-- One institute image supplies both the app logo and browser icons. --}}
+        <link rel="icon" href="{{ $branding['logo_url'] ?? '/apple-touch-icon.png' }}">
+        <link rel="apple-touch-icon" href="{{ $branding['logo_url'] ?? '/apple-touch-icon.png' }}">
 
         @fonts
 

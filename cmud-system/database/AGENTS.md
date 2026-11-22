@@ -1,5 +1,8 @@
 # CMUD ERP — Database Agent Instructions
 
+## maintain always explainable comment on code
+
+
 ## 1. Purpose
 
 This file defines instructions for AI agents working with database seeding in the CMUD ERP project.

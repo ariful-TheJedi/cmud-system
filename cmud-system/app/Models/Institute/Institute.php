@@ -2,15 +2,15 @@
 
 namespace App\Models\Institute;
 
-use App\Models\Finance\FinancialAccount;
-use App\Models\Finance\InstituteExpenseCategory;
-use App\Models\Finance\PaymentMethod;
-use App\Models\Finance\StudentExpenseType;
 use App\Models\Academy\CertificateTemplate;
 use App\Models\Academy\CommunicationGroup;
 use App\Models\Academy\Course;
 use App\Models\Academy\Student;
 use App\Models\Academy\Teacher;
+use App\Models\Finance\FinancialAccount;
+use App\Models\Finance\InstituteExpenseCategory;
+use App\Models\Finance\PaymentMethod;
+use App\Models\Finance\StudentExpenseType;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -26,6 +26,7 @@ class Institute extends Model
         'website',
         'address',
         'logo_path',
+        'site_icon_path',
         'is_active',
     ];
 

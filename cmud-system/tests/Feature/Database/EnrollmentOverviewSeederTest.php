@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Academy\Enrollment;
-use App\Modules\Academy\Services\CertificateOverviewService;
-use App\Modules\Academy\Services\EnrollmentService\AcademicProgressService;
+use App\Modules\Academy\Services\AcademicProgress\AcademicProgressService;
+use App\Modules\Academy\Services\Certificates\CertificateOverviewService;
 use Database\Seeders\Development\CoreDevelopmentSeeder;
 use Database\Seeders\Development\EnrollmentOverviewSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;

@@ -3,7 +3,7 @@
 namespace App\Modules\Finance\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Academy\Services\StudentSearchService;
+use App\Modules\Academy\Services\Students\StudentSearchService;
 use App\Modules\Finance\Requests\StudentPaymentHistoryRequest;
 use App\Modules\Finance\Services\StudentPaymentHistoryService;
 use Illuminate\Http\JsonResponse;

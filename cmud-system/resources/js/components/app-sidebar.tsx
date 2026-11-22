@@ -1,31 +1,31 @@
-import { Link } from '@inertiajs/react';
 import {
     CalendarDays,
-    ClipboardCheck,
     LayoutGrid,
+    ClipboardCheck,
+    FileCheck2,
+    Award,
+    Wallet,
+    CreditCard,
+    ReceiptText,
     UserRoundPlus,
     Settings,
-    Settings2,
+    BookOpen,
+    GraduationCap,
+    University,
+    Layers3,
+    BriefcaseBusiness,
     Building2,
     Users,
 } from 'lucide-react';
-import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
-import { NavUser } from '@/components/nav-user';
 import {
     Sidebar,
     SidebarContent,
-    SidebarFooter,
-    SidebarGroup,
-    SidebarGroupLabel,
     SidebarHeader,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
+    SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import type { NavItem } from '@/types';
-import { useCurrentUrl } from '@/hooks/use-current-url';
 
 const mainNavItems: NavItem[] = [
     {
@@ -33,89 +33,55 @@ const mainNavItems: NavItem[] = [
         href: dashboard(),
         icon: LayoutGrid,
     },
-    {
-        title: 'Students',
-        href: '/academy/students',
-        icon: ClipboardCheck,
-    },
-    {
-        title: 'Student Admission',
-        href: '/academy/students/admission',
-        icon: UserRoundPlus,
-    },
-    {
-        title: 'Academy Management',
-        href: '/academy/manage',
-        icon: Settings2,
-    },
-    {
-        title: 'Class routine',
-        href: '/academy/class-routine',
-        icon: CalendarDays,
-    },
 ];
 
 export function AppSidebar() {
-    const { isCurrentUrl } = useCurrentUrl();
-
     return (
+        <>
+        <SidebarTrigger className="fixed top-[calc(var(--app-header-height,0px)+1rem)] left-2 z-20 size-8 rounded-lg border border-slate-200 bg-white shadow-sm md:hidden" />
         <Sidebar
             collapsible="icon"
             variant="inset"
-            className="2xl:left-[calc((100vw-96rem)/2)]"
+            className="top-[var(--app-header-height,0px)] h-[calc(100svh-var(--app-header-height,0px))] 2xl:left-[calc((100vw-96rem)/2)]"
         >
-            <SidebarHeader>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" asChild>
-                            <Link href={dashboard()} prefetch>
-                                <AppLogo />
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                </SidebarMenu>
+            <SidebarHeader className="flex-row items-center justify-between border-b border-slate-200 px-3 py-3 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 dark:border-slate-800">
+                <span className="text-xs font-semibold tracking-wide text-slate-500 uppercase group-data-[collapsible=icon]:hidden">Navigation</span>
+                <SidebarTrigger className="shrink-0 text-slate-500" />
             </SidebarHeader>
-
-            <SidebarContent>
+            <SidebarContent className="py-3">
                 <NavMain items={mainNavItems} />
-                <SidebarGroup className="mt-auto px-2 py-0">
-                    <SidebarGroupLabel className="flex items-center gap-2">
-                        <Settings size={14} /> Settings
-                    </SidebarGroupLabel>
-                    <SidebarMenu>
-                        <SidebarMenuItem>
-                            <SidebarMenuButton
-                                asChild
-                                isActive={isCurrentUrl('/settings/institute')}
-                                tooltip={{ children: 'Institute' }}
-                            >
-                                <Link href="/settings/institute" prefetch>
-                                    <Building2 />
-                                    <span>Institute</span>
-                                </Link>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem>
-                            <SidebarMenuButton
-                                asChild
-                                isActive={isCurrentUrl(
-                                    '/settings/user-control',
-                                )}
-                                tooltip={{ children: 'User Control' }}
-                            >
-                                <Link href="/settings/user-control" prefetch>
-                                    <Users />
-                                    <span>User Control</span>
-                                </Link>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem>
-                    </SidebarMenu>
-                </SidebarGroup>
+                <NavMain title="Student management" icon={Users} items={[
+                    { title: 'Students', href: '/academy/students', icon: ClipboardCheck },
+                    { title: 'Student Admission', href: '/academy/students/admission', icon: UserRoundPlus },
+                ]} />
+                <NavMain title="Academic" icon={University} items={[
+                    { title: 'Courses', href: '/academy/manage/courses', icon: GraduationCap },
+                    { title: 'Batches', href: '/academy/manage/batches', icon: Layers3 },
+                    { title: 'Modules & subjects', href: '/academy/manage/subjects', icon: BookOpen },
+                    { title: 'Teachers', href: '/academy/manage/teachers', icon: BriefcaseBusiness },
+                    { title: 'Exam Control', href: '/academy/students/exam-control', icon: FileCheck2 },
+                    { title: 'Certificates', href: '/academy/certificates', icon: Award },
+                ]} />
+                <NavMain items={[
+                    { title: 'Staff', href: '/staff', icon: BriefcaseBusiness },
+                    { title: 'Class routine', href: '/academy/class-routine', icon: CalendarDays },
+                ]} />
+                <NavMain title="Billings" icon={Wallet} items={[
+                    { title: 'Student payment', href: '/billings/student-bill', icon: CreditCard },
+                    { title: 'Institute billing', href: '/billings/institute-billing', icon: ReceiptText },
+                ]} />
+                <NavMain title="Finance" icon={Wallet} items={[
+                    { title: 'Student revenue', href: '/finance/student-revenue', icon: CreditCard },
+                    { title: 'Institute expenditure', href: '/finance/institute-expenditure', icon: ReceiptText },
+                ]} />
+                <NavMain title="Settings" variant="settings" icon={Settings} className="mt-auto" items={[
+                    { title: 'Profile', href: '/settings/profile', icon: Users },
+                    { title: 'Institute', href: '/settings/institute', icon: Building2 },
+                    { title: 'User Control', href: '/settings/user-control', icon: Users },
+                    { title: 'Finance Control', href: '/settings/finance-control', icon: Wallet },
+                ]} />
             </SidebarContent>
-
-            <SidebarFooter>
-                <NavUser />
-            </SidebarFooter>
         </Sidebar>
+        </>
     );
 }

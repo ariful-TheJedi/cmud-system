@@ -3,7 +3,7 @@
 namespace Database\Seeders\Development;
 
 use App\Models\Academy\Student;
-use App\Modules\Academy\Services\EnrollmentService\StudentEnrollmentService;
+use App\Modules\Academy\Services\Enrollments\StudentEnrollmentService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use LogicException;

@@ -6,13 +6,25 @@ import SecurityProfile from './pages/security/settings/profile';
 import AppearanceSettings from './pages/security/settings/appearance';
 import Students from './pages/academy/students';
 import StudentAdmission from './pages/academy/student-admission';
-import AcademyManagement from './pages/academy/management';
+import ExamControl from './pages/academy/students/exam-control';
+import Certificates from './pages/academy/certificates';
+import StudentBill from './pages/billings/student-bill';
+import InstituteBilling from './pages/billings/institute-billing';
+import StudentRevenue from './pages/finance/student-revenue';
+import InstituteExpenditure from './pages/finance/institute-expenditure';
+import CoursesPage from './pages/academy/management/courses';
+import BatchesPage from './pages/academy/management/batches';
+import SubjectsPage from './pages/academy/management/subjects';
+import TeachersPage from './pages/academy/management/teachers';
 import InstituteSettings from './pages/settings/institute';
 import ClassRoutine from './pages/academy/class-routine';
 import UserControl from './pages/settings/user-control/index';
+import FinanceControl from './pages/settings/finance-control';
+import StaffPage from './pages/staff';
 
 const appName = import.meta.env.VITE_APP_NAME || 'CMUD System';
 const pages = {
+    staff: StaffPage,
     'errors/404': NotFound,
     dashboard: Dashboard,
     'security/settings/security': SecuritySettings,
@@ -20,10 +32,20 @@ const pages = {
     'security/settings/appearance': AppearanceSettings,
     'academy/students': Students,
     'academy/student-admission': StudentAdmission,
-    'academy/management': AcademyManagement,
+    'academy/students/exam-control': ExamControl,
+    'academy/certificates': Certificates,
+    'finance/student-revenue': StudentRevenue,
+    'finance/institute-expenditure': InstituteExpenditure,
+    'billings/student-bill': StudentBill,
+    'billings/institute-billing': InstituteBilling,
+    'academy/management/courses': CoursesPage,
+    'academy/management/batches': BatchesPage,
+    'academy/management/subjects': SubjectsPage,
+    'academy/management/teachers': TeachersPage,
     'settings/institute': InstituteSettings,
     'academy/class-routine': ClassRoutine,
     'settings/user-control/index': UserControl,
+    'settings/finance-control': FinanceControl,
 };
 
 void createInertiaApp({

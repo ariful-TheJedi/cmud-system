@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import {
     Building2,
     ExternalLink,
@@ -18,6 +18,7 @@ import AppLayout from '@/layouts/app-layout';
 import { ApiRequestError, useApi } from '@/hooks/use-api';
 import type { BreadcrumbItem } from '@/types';
 import BranchManager from '@/components/branch-manager';
+import InstituteAccounts from '@/components/institute-accounts';
 
 type InstituteOption = { id: number; code: string; name: string };
 type Branch = {
@@ -38,6 +39,7 @@ type Institute = InstituteOption & {
     address: string;
     logo_path: string | null;
     logo_url: string | null;
+    site_icon_url: string | null;
     is_active: boolean;
     branches: Branch[];
 };
@@ -295,6 +297,7 @@ export default function InstituteSettings() {
             setForm(formFromInstitute(response.data.data));
             setEditing(false);
             setNotice(response.data.message ?? 'Institute settings saved.');
+            router.reload({ only: ['branding'] });
         } catch (saveError) {
             setError(errorMessage(saveError));
         } finally {
@@ -521,7 +524,7 @@ export default function InstituteSettings() {
 
                                     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
                                         <h2 className="text-lg font-semibold text-[#17375C]">
-                                            Institute logo
+                                            Institute logo & site icon
                                         </h2>
                                         <div className="mt-4 flex flex-wrap items-center gap-4">
                                             {displayLogo && (
@@ -565,7 +568,7 @@ export default function InstituteSettings() {
                                                     </button>
                                                 )}
                                             <span className="text-xs text-slate-500">
-                                                PNG, JPG, or WebP up to 3 MB.
+                                                Used for the app logo and browser icon. A square image is recommended. PNG, JPG, or WebP up to 3 MB.
                                             </span>
                                         </div>
                                     </div>
@@ -758,6 +761,9 @@ export default function InstituteSettings() {
                             </div>
                         </div>
                     ) : null}
+                    {institute && !loading && !editing && !managingBranches && (
+                        <InstituteAccounts key={institute.id} instituteName={institute.name} />
+                    )}
                 </div>
             </main>
         </AppLayout>

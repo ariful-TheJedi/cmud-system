@@ -12,7 +12,7 @@ use App\Models\Academy\StudentGroupMembership;
 use App\Models\Finance\StudentTuition;
 use App\Models\Institute\Branch;
 use App\Models\Institute\Institute;
-use App\Modules\Academy\Services\EnrollmentService\StudentEnrollmentService;
+use App\Modules\Academy\Services\Enrollments\StudentEnrollmentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;

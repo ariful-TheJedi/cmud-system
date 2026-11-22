@@ -4,11 +4,50 @@ namespace Tests\Feature\Settings;
 
 use App\Models\Security\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ProfileUpdateTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_profile_photo_can_be_uploaded_and_replaced(): void
+    {
+        Storage::fake('public');
+        $user = User::forceCreate(['name' => 'Profile User', 'email' => 'profile@example.test', 'password' => 'password', 'is_active' => true]);
+
+        foreach (['first.png', 'second.png'] as $name) {
+            $oldPath = $user->photo_path;
+            $this->actingAs($user)->post(route('profile.update'), [
+                '_method' => 'patch',
+                'name' => 'Updated Name',
+                'email' => $user->email,
+                'phone' => '01712345678',
+                'photo' => UploadedFile::fake()->image($name),
+            ])->assertSessionHasNoErrors()->assertRedirect(route('profile.edit'));
+
+            $user->refresh();
+            Storage::disk('public')->assertExists($user->photo_path);
+            $this->assertSame('01712345678', $user->phone);
+            $this->assertNotNull($user->avatar);
+            if ($oldPath) {
+                Storage::disk('public')->assertMissing($oldPath);
+            }
+        }
+    }
+
+    public function test_profile_photo_must_be_an_image(): void
+    {
+        Storage::fake('public');
+        $user = User::forceCreate(['name' => 'Profile User', 'email' => 'profile@example.test', 'password' => 'password', 'is_active' => true]);
+        $this->actingAs($user)->patch(route('profile.update'), [
+            'name' => $user->name,
+            'email' => $user->email,
+            'photo' => UploadedFile::fake()->create('document.pdf'),
+        ])->assertSessionHasErrors('photo');
+        $this->assertNull($user->fresh()->photo_path);
+    }
 
     public function test_profile_page_is_displayed()
     {
