@@ -333,7 +333,7 @@ erDiagram
         bigint department_id FK
         bigint institute_expense_type_id FK
         bigint institute_expense_price_version_id FK
-        bigint staff_id FK
+        bigint stuff_id FK
         bigint teacher_id FK
         bigint asset_id FK
         varchar payee_name
@@ -482,11 +482,11 @@ erDiagram
         timestamp created_at
         timestamp updated_at
     }
-    staff {
+    stuff {
         bigint id PK
         bigint institute_id FK
         bigint user_id FK UK
-        varchar staff_code
+        varchar stuff_code
         varchar full_name
         varchar phone
         varchar email
@@ -502,9 +502,9 @@ erDiagram
         timestamp created_at
         timestamp updated_at
     }
-    staff_assignments {
+    stuff_assignments {
         bigint id PK
-        bigint staff_id FK
+        bigint stuff_id FK
         bigint branch_id FK
         bigint department_id FK
         timestamp created_at
@@ -740,7 +740,7 @@ erDiagram
     teachers {
         bigint id PK
         bigint institute_id FK
-        bigint staff_id FK
+        bigint stuff_id FK
         varchar teacher_code
         varchar full_name
         varchar phone
@@ -829,7 +829,7 @@ erDiagram
     institute_expense_types ||--o{ institute_expenses : "institute_expense_type_id"
     institute_expense_price_versions o|--o{ institute_expenses : "institute_expense_price_version_id"
     users ||--o{ institute_expenses : "recorded_by"
-    staff o|--o{ institute_expenses : "staff_id"
+    stuff o|--o{ institute_expenses : "stuff_id"
     teachers o|--o{ institute_expenses : "teacher_id"
     users o|--o{ institute_income_bill : "approved_by"
     users ||--o{ institute_income_bill : "recorded_by"
@@ -844,11 +844,11 @@ erDiagram
     permission_groups ||--o{ permissions : "permission_group_id"
     branches ||--o{ rooms : "branch_id"
     users o|--o{ sessions : "user_id"
-    users o|--o| staff : "user_id"
-    institutes ||--o{ staff : "institute_id"
-    branches ||--o{ staff_assignments : "branch_id"
-    departments ||--o{ staff_assignments : "department_id"
-    staff ||--o{ staff_assignments : "staff_id"
+    users o|--o| stuff : "user_id"
+    institutes ||--o{ stuff : "institute_id"
+    branches ||--o{ stuff_assignments : "branch_id"
+    departments ||--o{ stuff_assignments : "department_id"
+    stuff ||--o{ stuff_assignments : "stuff_id"
     stocks ||--o{ stock_movements : "stock_id"
     stock_categories o|--o{ stock_price_versions : "stock_category_id"
     stock_price_versions o|--o{ stock_movements : "stock_price_version_id"
@@ -891,5 +891,5 @@ erDiagram
     institutes ||--o{ students : "institute_id"
     medical_colleges o|--o{ students : "medical_college_id"
     institutes ||--o{ teachers : "institute_id"
-    staff o|--o{ teachers : "staff_id"
+    stuff o|--o{ teachers : "stuff_id"
     permission_groups o|--o{ users : "permission_group_id"

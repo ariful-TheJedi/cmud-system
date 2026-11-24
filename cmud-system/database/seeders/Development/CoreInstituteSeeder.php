@@ -81,37 +81,37 @@ class CoreInstituteSeeder extends Seeder
             $roomIds[$room['code']] = (int) $saved->id;
         }
 
-        $staffRows = [
-            ['code' => 'DEV-STAFF-001', 'name' => 'Ayesha Rahman', 'designation' => 'Development Coordinator', 'user' => $operatorId],
-            ['code' => 'DEV-STAFF-002', 'name' => 'Farhan Ahmed', 'designation' => 'Office Assistant', 'user' => null],
+        $stuffRows = [
+            ['code' => 'DEV-STUFF-001', 'name' => 'Ayesha Rahman', 'designation' => 'Development Coordinator', 'user' => $operatorId],
+            ['code' => 'DEV-STUFF-002', 'name' => 'Farhan Ahmed', 'designation' => 'Office Assistant', 'user' => null],
         ];
-        $staffIds = [];
-        foreach ($staffRows as $staff) {
-            $saved = $this->saveRow('staff', ['staff_code' => $staff['code']], [
+        $stuffIds = [];
+        foreach ($stuffRows as $stuff) {
+            $saved = $this->saveRow('stuff', ['stuff_code' => $stuff['code']], [
                 'institute_id' => $instituteId,
-                'user_id' => $staff['user'],
-                'full_name' => $staff['name'],
+                'user_id' => $stuff['user'],
+                'full_name' => $stuff['name'],
                 'phone' => '+880000000020',
-                'email' => strtolower($staff['code']).'@example.invalid',
+                'email' => strtolower($stuff['code']).'@example.invalid',
                 'nid_number' => null,
                 'address' => 'Fictional address, Dhaka 0000',
                 'date_of_birth' => '1990-01-01',
                 'photo_path' => null,
-                'designation' => $staff['designation'],
+                'designation' => $stuff['designation'],
                 'joining_date' => '2024-01-01',
                 'leaving_date' => null,
                 'employment_status' => 'active',
-                'notes' => 'Fictional staff record for development scenarios.',
+                'notes' => 'Fictional stuff record for development scenarios.',
             ]);
-            $staffIds[$staff['code']] = (int) $saved->id;
+            $stuffIds[$stuff['code']] = (int) $saved->id;
         }
 
         foreach ([
-            ['staff' => 'DEV-STAFF-001', 'branch' => 'DEV-BR-DHAKA', 'department' => 'DEV-DEPT-ADMIN'],
-            ['staff' => 'DEV-STAFF-002', 'branch' => 'DEV-BR-CHITTAGONG', 'department' => 'DEV-DEPT-OPERATIONS'],
+            ['stuff' => 'DEV-STUFF-001', 'branch' => 'DEV-BR-DHAKA', 'department' => 'DEV-DEPT-ADMIN'],
+            ['stuff' => 'DEV-STUFF-002', 'branch' => 'DEV-BR-CHITTAGONG', 'department' => 'DEV-DEPT-OPERATIONS'],
         ] as $assignment) {
-            $this->saveRow('staff_assignments', [
-                'staff_id' => $staffIds[$assignment['staff']],
+            $this->saveRow('stuff_assignments', [
+                'stuff_id' => $stuffIds[$assignment['stuff']],
                 'branch_id' => $branchIds[$assignment['branch']],
                 'department_id' => $departmentIds[$assignment['department']],
             ], []);

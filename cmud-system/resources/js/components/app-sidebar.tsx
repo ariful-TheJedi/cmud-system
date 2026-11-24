@@ -50,11 +50,9 @@ export function AppSidebar() {
             </SidebarHeader>
             <SidebarContent className="py-3">
                 <NavMain items={mainNavItems} />
-                <NavMain title="Student management" icon={Users} items={[
+                <NavMain title="Academy" icon={University} items={[
                     { title: 'Students', href: '/academy/students', icon: ClipboardCheck },
-                    { title: 'Student Admission', href: '/academy/students/admission', icon: UserRoundPlus },
-                ]} />
-                <NavMain title="Academic" icon={University} items={[
+                    { title: 'Admission', href: '/academy/students/admission', icon: UserRoundPlus },
                     { title: 'Courses', href: '/academy/manage/courses', icon: GraduationCap },
                     { title: 'Batches', href: '/academy/manage/batches', icon: Layers3 },
                     { title: 'Modules & subjects', href: '/academy/manage/subjects', icon: BookOpen },
@@ -63,7 +61,7 @@ export function AppSidebar() {
                     { title: 'Certificates', href: '/academy/certificates', icon: Award },
                 ]} />
                 <NavMain items={[
-                    { title: 'Staff', href: '/staff', icon: BriefcaseBusiness },
+                    { title: 'Stuff', href: '/stuff', icon: BriefcaseBusiness },
                     { title: 'Class routine', href: '/academy/class-routine', icon: CalendarDays },
                 ]} />
                 <NavMain title="Billings" icon={Wallet} items={[

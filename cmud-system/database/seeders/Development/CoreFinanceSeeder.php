@@ -179,7 +179,7 @@ class CoreFinanceSeeder extends Seeder
             'notes' => $this->scenarioNote('SD-FIN-005', 'Fictional student charge payment row.'),
         ]);
 
-        $expenseCategory = $this->saveRow('institute_expense_categories', [
+        $expenseCategory = $this->saveRow('institute_expense_types', [
             'institute_id' => $instituteId,
             'code' => 'DEV-INST-EXP-CAT-001',
         ], [
@@ -187,8 +187,8 @@ class CoreFinanceSeeder extends Seeder
             'description' => 'Fictional institute expense category.',
             'is_active' => true,
         ]);
-        $expenseType = $this->saveRow('institute_expense_types', [
-            'institute_expense_category_id' => $expenseCategory->id,
+        $expenseType = $this->saveRow('institute_expense_categories', [
+            'institute_expense_type_id' => $expenseCategory->id,
             'code' => 'DEV-INST-EXP-TYPE-001',
         ], [
             'name' => 'Demo Classroom Maintenance',
@@ -196,7 +196,7 @@ class CoreFinanceSeeder extends Seeder
             'is_active' => true,
         ]);
         $expensePrice = $this->saveRow('institute_expense_price_versions', [
-            'institute_expense_type_id' => $expenseType->id,
+            'institute_expense_category_id' => $expenseType->id,
             'branch_id' => $branchId,
             'version_number' => 1,
         ], [
@@ -212,9 +212,10 @@ class CoreFinanceSeeder extends Seeder
         $instituteExpense = $this->saveRow('institute_expenses', ['expense_number' => 'DEVCORE-IEXP-001'], [
             'branch_id' => $branchId,
             'department_id' => $departmentId,
-            'institute_expense_type_id' => $expenseType->id,
+            'institute_expense_type_id' => $expenseCategory->id,
+            'institute_expense_category_id' => $expenseType->id,
             'institute_expense_price_version_id' => $expensePrice->id,
-            'staff_id' => $this->findId('staff', ['staff_code' => 'DEV-STAFF-002']),
+            'stuff_id' => $this->findId('stuff', ['stuff_code' => 'DEV-STUFF-002']),
             'teacher_id' => $this->findId('teachers', ['teacher_code' => 'DEV-TEACHER-001']),
             'asset_id' => null,
             'payee_name' => 'Demo Facilities Supplier',

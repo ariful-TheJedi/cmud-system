@@ -254,18 +254,18 @@ class FinanceVolumeSeeder extends Seeder
 
     private function seedInstituteExpenses(int $instituteId, int $operatorId, int $methodId, int $accountId): void
     {
-        $categoryIds = [$this->findId('institute_expense_categories', ['institute_id' => $instituteId, 'code' => 'DEV-INST-EXP-CAT-001'])];
+        $typeIds = [$this->findId('institute_expense_types', ['institute_id' => $instituteId, 'code' => 'DEV-INST-EXP-CAT-001'])];
         foreach ([
             ['code' => 'DEV-INST-EXP-CAT-002', 'name' => 'Development Academic Materials'],
             ['code' => 'DEV-INST-EXP-CAT-003', 'name' => 'Development Facilities'],
             ['code' => 'DEV-INST-EXP-CAT-004', 'name' => 'Development Administration'],
         ] as $category) {
-            $saved = $this->saveRow('institute_expense_categories', ['institute_id' => $instituteId, 'code' => $category['code']], [
+            $saved = $this->saveRow('institute_expense_types', ['institute_id' => $instituteId, 'code' => $category['code']], [
                 'name' => $category['name'],
                 'description' => 'Fictional institute expense classification.',
                 'is_active' => true,
             ]);
-            $categoryIds[] = (int) $saved->id;
+            $typeIds[] = (int) $saved->id;
         }
 
         $typeSpecs = [
@@ -277,21 +277,27 @@ class FinanceVolumeSeeder extends Seeder
             ['code' => 'DEV-INST-EXP-TYPE-007', 'name' => 'Development Training Supplies', 'amount' => '2800.00'],
             ['code' => 'DEV-INST-EXP-TYPE-008', 'name' => 'Development Utilities', 'amount' => '4700.00'],
         ];
+        $firstCategoryId = $this->findId('institute_expense_categories', [
+            'institute_expense_type_id' => $typeIds[0],
+            'code' => 'DEV-INST-EXP-TYPE-001',
+        ]);
         $types = [[
-            'id' => $this->findId('institute_expense_types', ['institute_expense_category_id' => $categoryIds[0], 'code' => 'DEV-INST-EXP-TYPE-001']),
+            'id' => $firstCategoryId,
+            'type_id' => $typeIds[0],
             'code' => 'DEV-INST-EXP-TYPE-001',
             'amount' => '12000.00',
         ]];
         foreach ($typeSpecs as $index => $spec) {
-            $saved = $this->saveRow('institute_expense_types', [
-                'institute_expense_category_id' => $categoryIds[1 + ($index % 3)],
+            $parentTypeId = $typeIds[1 + ($index % 3)];
+            $saved = $this->saveRow('institute_expense_categories', [
+                'institute_expense_type_id' => $parentTypeId,
                 'code' => $spec['code'],
             ], [
                 'name' => $spec['name'],
                 'description' => 'Fictional finance reference type for development records.',
                 'is_active' => true,
             ]);
-            $types[] = ['id' => (int) $saved->id, 'code' => $spec['code'], 'amount' => $spec['amount']];
+            $types[] = ['id' => (int) $saved->id, 'type_id' => $parentTypeId, 'code' => $spec['code'], 'amount' => $spec['amount']];
         }
 
         $priceIds = [];
@@ -299,14 +305,15 @@ class FinanceVolumeSeeder extends Seeder
             $branchId = $index === 0 ? $this->findId('branches', ['institute_id' => $instituteId, 'code' => 'DEV-BR-DHAKA']) : null;
             if ($index === 0) {
                 $priceIds[$type['code']] = $this->findId('institute_expense_price_versions', [
-                    'institute_expense_type_id' => $type['id'],
+                    'institute_expense_category_id' => $type['id'],
                     'branch_id' => $branchId,
                     'version_number' => 1,
                 ]);
+
                 continue;
             }
             $price = $this->saveRow('institute_expense_price_versions', [
-                'institute_expense_type_id' => $type['id'],
+                'institute_expense_category_id' => $type['id'],
                 'branch_id' => null,
                 'version_number' => 1,
             ], [
@@ -336,9 +343,10 @@ class FinanceVolumeSeeder extends Seeder
             $expense = $this->saveRow('institute_expenses', ['expense_number' => $expenseNumber], [
                 'branch_id' => $branchId,
                 'department_id' => null,
-                'institute_expense_type_id' => $type['id'],
+                'institute_expense_type_id' => $type['type_id'],
+                'institute_expense_category_id' => $type['id'],
                 'institute_expense_price_version_id' => $priceIds[$type['code']],
-                'staff_id' => null,
+                'stuff_id' => null,
                 'teacher_id' => null,
                 'asset_id' => null,
                 'payee_name' => 'Fictional Development Service Provider',

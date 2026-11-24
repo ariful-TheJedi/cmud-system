@@ -1,4 +1,4 @@
-﻿# CMUD ERP â€” Seed Scenarios
+# CMUD ERP â€” Seed Scenarios
 
 > **Status:** Development dataset executed and database-verified on 2026-11-12; application workflows are largely unimplemented  
 > **Companion:** [`SEED_DATA_PLAN.md`](SEED_DATA_PLAN.md)  
@@ -28,7 +28,7 @@ For a new feature, add or update scenarios here rather than adding detailed scen
 | ID | Area | Business case | Core expected result | Status |
 |---|---|---|---|---|
 | SD-INS-001 | Institute | Multi-branch organizational structure | Rooms and departments resolve to valid owners | DB-verified |
-| SD-INS-002 | Institute | Staff/teacher branch assignments | Assignment links and scope are consistent | DB-verified |
+| SD-INS-002 | Institute | Stuff/teacher branch assignments | Assignment links and scope are consistent | DB-verified |
 | SD-INS-003 | Institute | Asset assigned to organization/location | Asset category and owner/location resolve | DB-verified |
 | SD-INS-004 | Inventory | Stock received | Expected available quantity from valid movement history | DB-verified |
 | SD-INS-005 | Inventory | Stock issued | Expected decrement without negative or invalid quantity | DB-verified |
@@ -64,7 +64,7 @@ Inspection covered the current migrations, Eloquent models, module route files, 
 | Scenario(s) | Schema support | Implementation support / required correction |
 |---|---|---|
 | SD-INS-001 | Institute, branches, departments, rooms FKs support valid parent records. Departments reference the institute, not a branch. | Branch-filtered department behavior is unsupported. Rooms do reference branches. |
-| SD-INS-002 | Staff assignments require staff+branch+department; teachers may link to staff; `branch_teacher` has a unique branch/teacher pair. | Assignment effective dates do not exist in `staff_assignments`; overlap checks and application behavior are unsupported. |
+| SD-INS-002 | Stuff assignments require stuff+branch+department; teachers may link to stuff; `branch_teacher` has a unique branch/teacher pair. | Assignment effective dates do not exist in `stuff_assignments`; overlap checks and application behavior are unsupported. |
 | SD-INS-003 | Asset requires category+branch and optionally room. | No DB rule ensures room belongs to the asset's branch; asset category has institute ownership but assets have no institute FK. Cross-scope validation is unsupported. |
 | SD-INS-004, SD-INS-005 | Stock, movement and price records can be related through FKs. | Movement types are strings; `quantity_on_hand` is stored independently; no movement calculation or nonnegative-stock validation was found. Expected closing balances 150/120 are unsupported. |
 | SD-INS-006 | Stock price versions have a unique `(stock_id, version_number)` pair; category and approver are optional FKs. | No effective-date overlap rule or date-based price selector was found. |
@@ -98,13 +98,13 @@ The following examples define proposed inputs and outcomes, not verified busines
 - **Expected:** Branch-filtered queries return only the corresponding rooms/departments **where branch scope actually exists**; every FK points to a real parent.
 - **Verify:** FK joins, API filtering if available, UI branch selection if implemented.
 
-### SD-INS-002 â€” Staff and teacher assignments
+### SD-INS-002 â€” Stuff and teacher assignments
 
-- **Purpose:** Demonstrate staff assignments and teaching assignment scope.
-- **Tables to inspect:** `staff`, `staff_assignments`, `teachers`, `branch_teacher` and relevant parents.
-- **Setup:** At least one staff member with a valid assignment; one teacher linked to a valid branch where the schema supports it.
-- **Expected:** No orphan foreign-key references. `staff_assignments` has no effective-date columns, so overlap behavior is out of scope for schema-backed sample data.
-- **Verify:** DB joins and available staff/teacher directory endpoints.
+- **Purpose:** Demonstrate stuff assignments and teaching assignment scope.
+- **Tables to inspect:** `stuff`, `stuff_assignments`, `teachers`, `branch_teacher` and relevant parents.
+- **Setup:** At least one stuff member with a valid assignment; one teacher linked to a valid branch where the schema supports it.
+- **Expected:** No orphan foreign-key references. `stuff_assignments` has no effective-date columns, so overlap behavior is out of scope for schema-backed sample data.
+- **Verify:** DB joins and available stuff/teacher directory endpoints.
 
 ### SD-INS-003 â€” Assigned asset
 
@@ -284,7 +284,7 @@ The following examples define proposed inputs and outcomes, not verified busines
 
 - **Purpose:** Verify category/type, expense record, price/version where applicable, and expense payment.
 - **Tables:** `institute_expense_categories`, `institute_expense_types`, `institute_expense_price_versions`, `institute_expenses`, `institute_expense_payments`.
-- **Expected:** Payment sum and outstanding amount (where applicable) reconcile; valid category/type/account references.
+- **Expected:** Payment sum and outstanding amount (where applicable) reconcile; valid institute/type/category/price/account references.
 
 ### SD-FIN-007 â€” Transfer between financial accounts
 
@@ -389,9 +389,9 @@ Observed row counts after the final rerun:
 
 | Foundation | Table counts | Seed-owned rows |
 |---|---|---:|
-| Institute & Operations | institutes 1; branches 3; departments 4; rooms 6; staff 12; staff_assignments 12; asset_categories 4; assets 12; stocks 10; stock_movements 30; stock_price_versions 20; stock_categories 4 | 118 |
+| Institute & Operations | institutes 1; branches 3; departments 4; rooms 6; stuff 12; stuff_assignments 12; asset_categories 4; assets 12; stocks 10; stock_movements 30; stock_price_versions 20; stock_categories 4 | 118 |
 | Academy | students 200; medical_colleges 20; courses 8; course_stages 10; batches 15; enrollments 250; student_stage_records 120; exam_records 100; certificate_templates 2; certificates 30; communication_groups 10; student_group_memberships 120; teachers 6; course_teacher 8; course_price_versions 9; subjects 17; course_subject 37; branch_teacher 6 | 968 |
-| Finance | student_tuitions 200; student_tuition_payments 300; student_expense_types 4; student_expense_price_versions 10; student_expenses 50; student_other_payments 40; institute_expense_categories 4; institute_expense_types 8; institute_expense_price_versions 8; institute_expenses 20; institute_expense_payments 20; payment_methods 3; financial_accounts 3; account_transfers 5; institute_income_bill 10; institute_other_income_bill_payment 10 | 695 |
+| Finance | student_tuitions 200; student_tuition_payments 300; student_expense_types 4; student_expense_price_versions 10; student_expenses 50; student_other_payments 40; institute_expense_types 5; institute_expense_categories 9; institute_expense_price_versions 8; institute_expenses 20; institute_expense_payments 20; payment_methods 3; financial_accounts 3; account_transfers 5; institute_income_bill 10; institute_other_income_bill_payment 10 | 697 |
 | Access & Auditing | users 2; permission_groups 2; permissions 0; audit_logs 0. `sessions` 2 and `password_reset_tokens` 0 are runtime tables, not seeded. | 4 |
 
 Read-only checks found 121 validated foreign-key constraints and no unvalidated constraints; enrollment/batch scope, stage/course/batch scope, tuition/course-price scope and amount, tuition/expense payment overages, expense price/source amount matches, institute expense and income-bill overages, bill JSON line totals, and duplicate payment numbers all had zero mismatches. All 10 stock quantities equal opening balance + receipts - issues (120 for the core stock and 110 for each of nine volume stocks). The four anchored tuition source records yielded 0.00, 25,000.00, 20,000.00, and 30,000.00 due respectively. These are direct source-row calculations, not verified application outputs. The final two reruns after the additive-pivot correction left all observed counts unchanged. The first failed attempt due to a missing expense-type `name` was rolled back; no database rows were left by that attempt.

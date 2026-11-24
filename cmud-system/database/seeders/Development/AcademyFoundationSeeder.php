@@ -31,8 +31,8 @@ class AcademyFoundationSeeder extends Seeder
             $missing[] = 'development approver core.operator@example.invalid (run the Access foundation seeder first)';
         }
 
-        if (! DB::table('staff')->where('staff_code', 'DEV-STAFF-002')->exists()) {
-            $missing[] = 'staff code DEV-STAFF-002 (run the Institute foundation seeder first)';
+        if (! DB::table('stuff')->where('stuff_code', 'DEV-STUFF-002')->exists()) {
+            $missing[] = 'stuff code DEV-STUFF-002 (run the Institute foundation seeder first)';
         }
 
         if ($missing !== []) {

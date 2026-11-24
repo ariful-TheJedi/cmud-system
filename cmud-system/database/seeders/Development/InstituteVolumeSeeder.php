@@ -25,8 +25,8 @@ class InstituteVolumeSeeder extends Seeder
 
         DB::transaction(function () use ($instituteId, $operatorId, $branches): void {
             $this->seedRooms($branches);
-            $staff = $this->seedStaff($instituteId, $branches);
-            $this->seedAssignments($staff, $branches, $instituteId);
+            $stuff = $this->seedStuff($instituteId, $branches);
+            $this->seedAssignments($stuff, $branches, $instituteId);
             $categories = $this->seedAssetCategories($instituteId);
             $this->seedAssets($categories, $branches);
             $stockCategories = $this->seedStockCategories();
@@ -58,7 +58,7 @@ class InstituteVolumeSeeder extends Seeder
     /** @param array<string, int> $branches
      *  @return array<int, int>
      */
-    private function seedStaff(int $instituteId, array $branches): array
+    private function seedStuff(int $instituteId, array $branches): array
     {
         $people = [
             ['Nadia Karim', 'Academic Coordinator'], ['Ruhul Amin', 'Office Administrator'],
@@ -68,16 +68,16 @@ class InstituteVolumeSeeder extends Seeder
             ['Lamia Rahman', 'Programme Coordinator'], ['Sabbir Chowdhury', 'Support Officer'],
         ];
         $branchCodes = array_keys($branches);
-        $staffIds = [];
+        $stuffIds = [];
         foreach ($people as $index => [$name, $designation]) {
             $number = $index + 3;
-            $code = 'DEV-STAFF-'.str_pad((string) $number, 3, '0', STR_PAD_LEFT);
-            $saved = $this->saveRow('staff', ['staff_code' => $code], [
+            $code = 'DEV-STUFF-'.str_pad((string) $number, 3, '0', STR_PAD_LEFT);
+            $saved = $this->saveRow('stuff', ['stuff_code' => $code], [
                 'institute_id' => $instituteId,
                 'user_id' => null,
                 'full_name' => $name,
                 'phone' => '+88000000'.str_pad((string) (2000 + $number), 5, '0', STR_PAD_LEFT),
-                'email' => 'institute.staff.'.str_pad((string) $number, 3, '0', STR_PAD_LEFT).'@example.invalid',
+                'email' => 'institute.stuff.'.str_pad((string) $number, 3, '0', STR_PAD_LEFT).'@example.invalid',
                 'nid_number' => null,
                 'address' => 'Fictional '.['Dhaka', 'Chattogram', 'Sylhet'][$index % 3].' address, Bangladesh 0000',
                 'date_of_birth' => sprintf('%04d-%02d-%02d', 1985 + ($index % 8), 1 + ($index % 12), 3 + ($index % 24)),
@@ -86,25 +86,25 @@ class InstituteVolumeSeeder extends Seeder
                 'joining_date' => sprintf('2024-%02d-01', 1 + ($index % 12)),
                 'leaving_date' => null,
                 'employment_status' => 'active',
-                'notes' => 'Fictional staff profile; assignment lifecycle rules are pending.',
+                'notes' => 'Fictional stuff profile; assignment lifecycle rules are pending.',
             ]);
-            $staffIds[$number] = (int) $saved->id;
+            $stuffIds[$number] = (int) $saved->id;
         }
 
-        return $staffIds;
+        return $stuffIds;
     }
 
-    /** @param array<int, int> $staff @param array<string, int> $branches */
-    private function seedAssignments(array $staff, array $branches, int $instituteId): void
+    /** @param array<int, int> $stuff @param array<string, int> $branches */
+    private function seedAssignments(array $stuff, array $branches, int $instituteId): void
     {
         $departments = [];
         foreach (['DEV-DEPT-ACADEMY', 'DEV-DEPT-ADMIN', 'DEV-DEPT-FINANCE', 'DEV-DEPT-OPERATIONS'] as $code) {
             $departments[] = $this->findId('departments', ['institute_id' => $instituteId, 'code' => $code]);
         }
         $branchIds = array_values($branches);
-        foreach ($staff as $offset => $staffId) {
-            $this->saveRow('staff_assignments', [
-                'staff_id' => $staffId,
+        foreach ($stuff as $offset => $stuffId) {
+            $this->saveRow('stuff_assignments', [
+                'stuff_id' => $stuffId,
                 'branch_id' => $branchIds[$offset % count($branchIds)],
                 'department_id' => $departments[$offset % count($departments)],
             ], []);

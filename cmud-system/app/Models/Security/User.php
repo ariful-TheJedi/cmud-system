@@ -2,6 +2,7 @@
 
 namespace App\Models\Security;
 
+use App\Models\Academy\CoursePriceVersion;
 use App\Models\Finance\AccountTransfer;
 use App\Models\Finance\InstituteExpense;
 use App\Models\Finance\InstituteExpensePayment;
@@ -14,21 +15,22 @@ use App\Models\Finance\StudentExpensePriceVersion;
 use App\Models\Finance\StudentTuition;
 use App\Models\Finance\StudentTuitionPayment;
 use App\Models\Institute\StockPriceVersion;
-use App\Models\Institute\Staff;
-use App\Models\Institute\StaffAssignment;
-use App\Models\Academy\CoursePriceVersion;
+use App\Models\Institute\Branch;
+use App\Models\Institute\Stuff;
+use App\Models\Institute\StuffAssignment;
 use Database\Factories\Security\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -46,7 +48,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'email', 'password', 'phone', 'designation', 'is_active', 'is_super_admin', 'permission_group_id'])]
+#[Fillable(['name', 'email', 'password', 'phone', 'designation', 'is_active', 'is_super_admin', 'branch_id', 'permission_group_id'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 {
@@ -54,7 +56,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 
     public function getAvatarAttribute(): ?string
     {
-        return $this->photo_path ? \Illuminate\Support\Facades\Storage::disk('public')->url($this->photo_path) : null;
+        return $this->photo_path ? Storage::disk('public')->url($this->photo_path) : null;
     }
 
     /** @use HasFactory<UserFactory> */
@@ -81,14 +83,19 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
         return $this->belongsTo(PermissionGroup::class, 'permission_group_id');
     }
 
-    public function staff(): HasOne
+    public function branch(): BelongsTo
     {
-        return $this->hasOne(Staff::class);
+        return $this->belongsTo(Branch::class);
     }
 
-    public function staffAssignments(): HasManyThrough
+    public function stuff(): HasOne
     {
-        return $this->hasManyThrough(StaffAssignment::class, Staff::class, 'user_id', 'staff_id');
+        return $this->hasOne(Stuff::class);
+    }
+
+    public function stuffAssignments(): HasManyThrough
+    {
+        return $this->hasManyThrough(StuffAssignment::class, Stuff::class, 'user_id', 'stuff_id');
     }
 
     public function sessions(): HasMany
@@ -106,28 +113,118 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
         return $this->hasMany(AuditLog::class, 'actor_user_id');
     }
 
-    public function approvedCoursePriceVersions(): HasMany { return $this->hasMany(CoursePriceVersion::class, 'approved_by'); }
-    public function approvedStockPriceVersions(): HasMany { return $this->hasMany(StockPriceVersion::class, 'approved_by'); }
+    public function approvedCoursePriceVersions(): HasMany
+    {
+        return $this->hasMany(CoursePriceVersion::class, 'approved_by');
+    }
 
-    public function approvedTuitionWaivers(): HasMany { return $this->hasMany(StudentTuition::class, 'waiver_approved_by'); }
-    public function verifiedTuitionPayments(): HasMany { return $this->hasMany(StudentTuitionPayment::class, 'verified_by'); }
-    public function recordedTuitionPayments(): HasMany { return $this->hasMany(StudentTuitionPayment::class, 'recorded_by'); }
-    public function approvedStudentExpensePrices(): HasMany { return $this->hasMany(StudentExpensePriceVersion::class, 'approved_by'); }
-    public function approvedStudentExpenseWaivers(): HasMany { return $this->hasMany(StudentExpense::class, 'waiver_approved_by'); }
-    public function recordedStudentExpenses(): HasMany { return $this->hasMany(StudentExpense::class, 'recorded_by'); }
-    public function verifiedStudentExpensePayments(): HasMany { return $this->hasMany(StudentExpensePayment::class, 'verified_by'); }
-    public function recordedStudentExpensePayments(): HasMany { return $this->hasMany(StudentExpensePayment::class, 'recorded_by'); }
-    public function approvedInstituteExpensePrices(): HasMany { return $this->hasMany(InstituteExpensePriceVersion::class, 'approved_by'); }
-    public function approvedInstituteExpenses(): HasMany { return $this->hasMany(InstituteExpense::class, 'approved_by'); }
-    public function recordedInstituteExpenses(): HasMany { return $this->hasMany(InstituteExpense::class, 'recorded_by'); }
-    public function approvedInstituteIncomeBills(): HasMany { return $this->hasMany(InstituteIncomeBill::class, 'approved_by'); }
-    public function recordedInstituteIncomeBills(): HasMany { return $this->hasMany(InstituteIncomeBill::class, 'recorded_by'); }
-    public function verifiedInstituteExpensePayments(): HasMany { return $this->hasMany(InstituteExpensePayment::class, 'verified_by'); }
-    public function recordedInstituteExpensePayments(): HasMany { return $this->hasMany(InstituteExpensePayment::class, 'recorded_by'); }
-    public function receivedOtherIncomeBillPayments(): HasMany { return $this->hasMany(InstituteOtherIncomeBillPayment::class, 'received_by'); }
-    public function verifiedOtherIncomeBillPayments(): HasMany { return $this->hasMany(InstituteOtherIncomeBillPayment::class, 'verified_by'); }
-    public function recordedOtherIncomeBillPayments(): HasMany { return $this->hasMany(InstituteOtherIncomeBillPayment::class, 'recorded_by'); }
-    public function approvedAccountTransfers(): HasMany { return $this->hasMany(AccountTransfer::class, 'approved_by'); }
-    public function confirmedAccountTransfers(): HasMany { return $this->hasMany(AccountTransfer::class, 'confirmed_by'); }
-    public function recordedAccountTransfers(): HasMany { return $this->hasMany(AccountTransfer::class, 'recorded_by'); }
+    public function approvedStockPriceVersions(): HasMany
+    {
+        return $this->hasMany(StockPriceVersion::class, 'approved_by');
+    }
+
+    public function approvedTuitionWaivers(): HasMany
+    {
+        return $this->hasMany(StudentTuition::class, 'waiver_approved_by');
+    }
+
+    public function verifiedTuitionPayments(): HasMany
+    {
+        return $this->hasMany(StudentTuitionPayment::class, 'verified_by');
+    }
+
+    public function recordedTuitionPayments(): HasMany
+    {
+        return $this->hasMany(StudentTuitionPayment::class, 'recorded_by');
+    }
+
+    public function approvedStudentExpensePrices(): HasMany
+    {
+        return $this->hasMany(StudentExpensePriceVersion::class, 'approved_by');
+    }
+
+    public function approvedStudentExpenseWaivers(): HasMany
+    {
+        return $this->hasMany(StudentExpense::class, 'waiver_approved_by');
+    }
+
+    public function recordedStudentExpenses(): HasMany
+    {
+        return $this->hasMany(StudentExpense::class, 'recorded_by');
+    }
+
+    public function verifiedStudentExpensePayments(): HasMany
+    {
+        return $this->hasMany(StudentExpensePayment::class, 'verified_by');
+    }
+
+    public function recordedStudentExpensePayments(): HasMany
+    {
+        return $this->hasMany(StudentExpensePayment::class, 'recorded_by');
+    }
+
+    public function approvedInstituteExpensePrices(): HasMany
+    {
+        return $this->hasMany(InstituteExpensePriceVersion::class, 'approved_by');
+    }
+
+    public function approvedInstituteExpenses(): HasMany
+    {
+        return $this->hasMany(InstituteExpense::class, 'approved_by');
+    }
+
+    public function recordedInstituteExpenses(): HasMany
+    {
+        return $this->hasMany(InstituteExpense::class, 'recorded_by');
+    }
+
+    public function approvedInstituteIncomeBills(): HasMany
+    {
+        return $this->hasMany(InstituteIncomeBill::class, 'approved_by');
+    }
+
+    public function recordedInstituteIncomeBills(): HasMany
+    {
+        return $this->hasMany(InstituteIncomeBill::class, 'recorded_by');
+    }
+
+    public function verifiedInstituteExpensePayments(): HasMany
+    {
+        return $this->hasMany(InstituteExpensePayment::class, 'verified_by');
+    }
+
+    public function recordedInstituteExpensePayments(): HasMany
+    {
+        return $this->hasMany(InstituteExpensePayment::class, 'recorded_by');
+    }
+
+    public function receivedOtherIncomeBillPayments(): HasMany
+    {
+        return $this->hasMany(InstituteOtherIncomeBillPayment::class, 'received_by');
+    }
+
+    public function verifiedOtherIncomeBillPayments(): HasMany
+    {
+        return $this->hasMany(InstituteOtherIncomeBillPayment::class, 'verified_by');
+    }
+
+    public function recordedOtherIncomeBillPayments(): HasMany
+    {
+        return $this->hasMany(InstituteOtherIncomeBillPayment::class, 'recorded_by');
+    }
+
+    public function approvedAccountTransfers(): HasMany
+    {
+        return $this->hasMany(AccountTransfer::class, 'approved_by');
+    }
+
+    public function confirmedAccountTransfers(): HasMany
+    {
+        return $this->hasMany(AccountTransfer::class, 'confirmed_by');
+    }
+
+    public function recordedAccountTransfers(): HasMany
+    {
+        return $this->hasMany(AccountTransfer::class, 'recorded_by');
+    }
 }

@@ -34,7 +34,7 @@ Before proceeding, Codex must record:
 | Dataset | Goal | Identity strategy |
 |---|---|---|
 | Reference | Stable institutes, branches, academic offerings, methods, categories and permission definitions | Reuse existing natural unique keys; create only missing approved development records |
-| Operational | Coherent staff, student, enrollment, tuition, exam, inventory and accounting histories | Stable test-only business identifiers where supported; parent FK IDs resolved from persisted parents |
+| Operational | Coherent stuff, student, enrollment, tuition, exam, inventory and accounting histories | Stable test-only business identifiers where supported; parent FK IDs resolved from persisted parents |
 | Anchored scenarios | Small, easily findable records that exercise defined business cases | Stable scenario IDs in documentation and stable record lookup keys |
 
 Use fake non-contactable personal data and neutral/placeholder addresses; do not seed real student records, valid passwords in documentation, real financial account credentials, or real mobile payment transaction IDs. Use Bangladeshi formats only when validation supports safe synthetic values.
@@ -42,7 +42,7 @@ Use fake non-contactable personal data and neutral/placeholder addresses; do not
 ### 3.2 Initial volume targets (proposals, not guarantees)
 
 - 1 fictional development institute / institute record consistent with the schema; 3 branches if supported.
-- ~12 staff, ~6 teachers, ~8 courses, ~23 batches (including 8 open future cohorts for admission-form checks), ~20 medical college reference records.
+- ~12 stuff, ~6 teachers, ~8 courses, ~23 batches (including 8 open future cohorts for admission-form checks), ~20 medical college reference records.
 - ~200 students; ~250 enrollments where the business rules allow multiple enrollments.
 - Associated financial/academic/stock records driven by the scenario distributions and actual relationships.
 - Zero seeded sessions or password-reset tokens by default.
@@ -72,8 +72,8 @@ Use fake non-contactable personal data and neutral/placeholder addresses; do not
 | `branches` | Ref | 3 | Required FK to institute; branch `code` is not unique | INS-001 |
 | `departments` | Ref | 4–6 | Required FK to institute; no branch FK exists | INS-001 |
 | `rooms` | Ref | 6–12 | Required FK to branch; no department FK exists | INS-001 |
-| `staff` | Op | 12 | Required institute FK; optional unique `user_id` uses `SET NULL` on user deletion | INS-002 |
-| `staff_assignments` | Op | 12–18 | Required staff, branch and department FKs; no dates or pair uniqueness | INS-002 |
+| `stuff` | Op | 12 | Required institute FK; optional unique `user_id` uses `SET NULL` on user deletion | INS-002 |
+| `stuff_assignments` | Op | 12–18 | Required stuff, branch and department FKs; no dates or pair uniqueness | INS-002 |
 | `asset_categories` | Ref | 4–6 | Required institute FK | INS-003 |
 | `assets` | Op | 12–25 | Required category and branch FKs; optional room FK; no same-branch check | INS-003 |
 | `stocks` | Op | 10–20 | Required branch FK; `quantity_on_hand` stored separately from movements | INS-004/005 |
@@ -97,7 +97,7 @@ Use fake non-contactable personal data and neutral/placeholder addresses; do not
 | `certificates` | Op | 30–70 | Required enrollment and template FKs; nullable unique certificate number; no eligibility constraint | ACA-006 |
 | `communication_groups` | Op | 10–20 | Required institute; optional branch/course/batch FKs | ACA-007 |
 | `student_group_memberships` | Op/pivot | 120–220 | Required student/group FKs; pair is not unique | ACA-007 |
-| `teachers` | Op | 6 | Required institute; optional staff FK; unique teacher code | ACA-008 |
+| `teachers` | Op | 6 | Required institute; optional stuff FK; unique teacher code | ACA-008 |
 | `course_price_versions` | Evt | 8–16 | Course FK; optional branch/approver; scoped version-number uniqueness, no effective-date overlap check | ACA-009 |
 | `subjects` | Ref | 15–25 | Module with required course FK after catalog assignment; unique subject code | ACA-008 |
 | `subject_teacher` | Op/pivot | 20–40 | Required teacher/module FKs; unique pair | ACA-008 |
@@ -113,10 +113,10 @@ Use fake non-contactable personal data and neutral/placeholder addresses; do not
 | `student_expense_price_versions` | Evt | 4–12 | Required type FK; optional branch/course/stage/approver; no date-overlap constraint | FIN-005 |
 | `student_expenses` | Op | 50–100 | Required student/branch/type/price/recorder; optional enrollment/stage/waiver approver | FIN-005 |
 | `student_other_payments` | Evt | 40–100 | Current PostgreSQL name; required expense/method/account/recorder and optional verifier FKs; model explicitly maps to this table | FIN-005 |
-| `institute_expense_categories` | Ref | 4–6 | Required institute FK | FIN-006 |
-| `institute_expense_types` | Ref | 8–12 | Required category FK | FIN-006 |
-| `institute_expense_price_versions` | Evt | 8–12 | Required type FK; optional branch/approver; no date-overlap constraint | FIN-006 |
-| `institute_expenses` | Op | 20–40 | Required type/recorder; optional branch, department, price version, staff, teacher, asset and approver | FIN-006 |
+| `institute_expense_types` | Ref | 4–6 | Selectable expense type; required institute FK | FIN-006 |
+| `institute_expense_categories` | Ref | 8–12 | Billable category/item; required expense type FK | FIN-006 |
+| `institute_expense_price_versions` | Evt | 8–12 | Required category/item FK; optional branch/approver; no date-overlap constraint | FIN-006 |
+| `institute_expenses` | Op | 20–40 | Required expense type/category; optional recorder after the billing migration; optional branch, department, price version, stuff, teacher, asset and approver | FIN-006 |
 | `institute_expense_payments` | Evt | 20–40 | Required expense/method/account/recorder; optional verifier; no settlement constraint | FIN-006 |
 | `payment_methods` | Ref | 3–5 | Required institute FK; unique code; capability flags are stored booleans only | FIN-001 |
 | `financial_accounts` | Ref/Op | 3–6 | Required institute FK, optional branch; unique code; `opening_balance_as_of` is required | FIN-007 |
@@ -137,18 +137,18 @@ Use fake non-contactable personal data and neutral/placeholder addresses; do not
 
 ## 5. Verified dependency and insertion order
 
-This order is derived from migration foreign keys. Nullable edges are optional but, when populated, require the same parent-first order. There are no FK cycles. `staff.user_id` is nullable/unique and has `ON DELETE SET NULL`; it does not create a cycle because `users` does not reference `staff`.
+This order is derived from migration foreign keys. Nullable edges are optional but, when populated, require the same parent-first order. There are no FK cycles. `stuff.user_id` is nullable/unique and has `ON DELETE SET NULL`; it does not create a cycle because `users` does not reference `stuff`.
 
 | Phase | Tables | Required parents / notes |
 |---|---|---|
 | 1. Roots | `permission_groups`, `institutes`, `medical_colleges`, `stock_categories` | No application-table parents. |
-| 2. Shared principals and references | `users`, `permissions`, `branches`, `departments`, `courses`, `asset_categories`, `student_expense_types`, `institute_expense_categories`, `payment_methods` | `users` optionally references `permission_groups`; `permissions` requires `permission_groups`; the other listed organization references require `institutes`. |
-| 3. Staff, location and catalog children | `rooms`, `staff`, `course_stages`, `batches`, `teachers`, `institute_expense_types`, `financial_accounts`, `stocks`, `certificate_templates` | Parents respectively: branch; institute and optional user; course; course+branch; institute+optional staff; category; institute+optional branch; branch; institute+optional course. |
-| 4. Price and assignment records | `staff_assignments`, `assets`, `branch_teacher`, `subject_teacher`, `course_price_versions`, `stock_price_versions`, `student_expense_price_versions`, `institute_expense_price_versions` | Require staff/branch/department; category/location; branch+teacher; module+teacher; course+optional branch/user; stock+optional category/user; expense type+optional branch/course/stage/user; institute expense type+optional branch/user. |
+| 2. Shared principals and references | `users`, `permissions`, `branches`, `departments`, `courses`, `asset_categories`, `student_expense_types`, `institute_expense_types`, `payment_methods` | `users` optionally references `permission_groups`; `permissions` requires `permission_groups`; the other listed organization references require `institutes`. |
+| 3. Stuff, location and catalog children | `rooms`, `stuff`, `course_stages`, `batches`, `teachers`, `institute_expense_categories`, `financial_accounts`, `stocks`, `certificate_templates` | Parents respectively: branch; institute and optional user; course; course+branch; institute+optional stuff; expense type; institute+optional branch; branch; institute+optional course. |
+| 4. Price and assignment records | `stuff_assignments`, `assets`, `branch_teacher`, `subject_teacher`, `course_price_versions`, `stock_price_versions`, `student_expense_price_versions`, `institute_expense_price_versions` | Require stuff/branch/department; category/location; branch+teacher; module+teacher; course+optional branch/user; stock+optional category/user; expense type+optional branch/course/stage/user; institute expense category/item+optional branch/user. |
 | 5. Students and cohorts | `students`, `communication_groups`, `enrollments` | Students require institute+admission branch and optional college. Groups require institute and optional branch/course/batch. Enrollments require student+course+branch and optional batch. |
 | 6. Academic progression | `student_stage_records`, `exam_records`, `certificates`, `student_group_memberships` | Stage records require enrollment+course stage+batch; exams require stage record; certificates require enrollment+template; memberships require student+group. |
 | 7. Student finance | `student_tuitions`, `student_expenses` | Tuition requires enrollment+course price version and optional waiver approver. Expenses require student+branch+expense type+price version+recorder and optional enrollment, stage record and waiver approver. |
-| 8. Payments and accounting history | `student_tuition_payments`, `student_other_payments`, `institute_expenses`, `account_transfers`, `institute_income_bill` | Student payments require tuition/expense, method, account, recorder and optional verifier. Institute expenses require expense type+recorder and optional branch, department, price version, staff, teacher, asset, approver. Transfers require two accounts+recorder and optional approver/confirmer. Income bills require recorder and optional approver. |
+| 8. Payments and accounting history | `student_tuition_payments`, `student_other_payments`, `institute_expenses`, `account_transfers`, `institute_income_bill` | Student payments require tuition/expense, method, account, recorder and optional verifier. Institute expenses require expense type+category/item and optional recorder, branch, department, price version, stuff, teacher, asset, approver. Transfers require two accounts+recorder and optional approver/confirmer. Income bills require recorder and optional approver. |
 | 9. Remaining payment/inventory/audit events | `stock_movements`, `institute_expense_payments`, `institute_other_income_bill_payment`, `audit_logs` | Stock movements require stock and optionally a stock price version; expense payments require expense+method+account+recorder; bill payments require bill+method+account+recorder and optional receiver/verifier; audit rows optionally reference a user. |
 | Runtime-managed | `sessions`, `password_reset_tokens` | Leave empty; runtime records reference users. |
 
@@ -178,7 +178,7 @@ database/
         └── FinanceVolumeSeeder.php
 ```
 
-`AcademyFoundationSeeder` requires the Institute anchors (`CMUD-DEV-CORE`, its three development branches, and `DEV-STAFF-002`) and the Access approver (`core.operator@example.invalid`). It fails with the missing lookup keys instead of creating those parent records. It runs `CoreAcademySeeder` followed by `AcademyVolumeSeeder`; the parent and volume seeders reject environments other than `local` and `testing`. The Academy seeder is not wired into `DatabaseSeeder`.
+`AcademyFoundationSeeder` requires the Institute anchors (`CMUD-DEV-CORE`, its three development branches, and `DEV-STUFF-002`) and the Access approver (`core.operator@example.invalid`). It fails with the missing lookup keys instead of creating those parent records. It runs `CoreAcademySeeder` followed by `AcademyVolumeSeeder`; the parent and volume seeders reject environments other than `local` and `testing`. The Academy seeder is not wired into `DatabaseSeeder`.
 
 The full development sequence is Access, Institute core, Institute volume, Academy foundation (core anchors then Academy volume), Finance core, and Finance volume. The Institute and Finance volume seeders extend only namespaced volume rows and preserve core scenario identifiers. The explicit full-core command is `php artisan db:seed --class="Database\\Seeders\\Development\\CoreDevelopmentSeeder"`; it is guarded to `local` and `testing` and is not wired into `DatabaseSeeder`. Observed execution and verification are recorded in `SEED_SCENARIOS.md`.
 

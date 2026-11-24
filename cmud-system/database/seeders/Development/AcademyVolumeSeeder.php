@@ -276,7 +276,7 @@ class AcademyVolumeSeeder extends Seeder
             $code = 'DEV-ACA-TEACHER-'.str_pad((string) $number, 2, '0', STR_PAD_LEFT);
             $saved = $this->saveRow('teachers', ['teacher_code' => $code], [
                 'institute_id' => $instituteId,
-                'staff_id' => null,
+                'stuff_id' => null,
                 'full_name' => $name,
                 'phone' => '+880000000'.str_pad((string) (300 + $number), 3, '0', STR_PAD_LEFT),
                 'email' => 'academy.teacher.'.str_pad((string) $number, 2, '0', STR_PAD_LEFT).'@example.invalid',

@@ -2,6 +2,7 @@ import { Form, Head, Link, usePage } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import InputError from '@/components/input-error';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { useInitials } from '@/hooks/use-initials';
 import { send } from '@/routes/verification';
 import type { Auth } from '@/types';
@@ -17,7 +18,7 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
             <Form action="/settings/profile" method="post" encType="multipart/form-data" options={{ preserveScroll: true }} className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
                 {({ processing, errors, recentlySuccessful }) => <>
                     <input type="hidden" name="_method" value="patch" />
-                    <div className="flex items-center gap-4"><Avatar className="size-20"><AvatarImage src={auth.user.avatar} alt={auth.user.name} /><AvatarFallback>{initials(auth.user.name)}</AvatarFallback></Avatar><div><p className="font-semibold text-[#17375C]">{auth.user.name}</p><p className="text-sm text-slate-500">{auth.user.email}</p></div></div>
+                    <div className="flex items-center gap-4"><Avatar className="size-20"><AvatarImage src={auth.user.avatar} alt={auth.user.name} /><AvatarFallback>{initials(auth.user.name)}</AvatarFallback></Avatar><div><div className="flex flex-wrap items-center gap-2"><p className="font-semibold text-[#17375C]">{auth.user.name}</p>{auth.user.is_super_admin && <Badge className="border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-50">Super Admin</Badge>}</div><p className="text-sm text-slate-500">{auth.user.email}</p></div></div>
                     <label className="block text-sm font-medium">Profile photo<input type="file" name="photo" accept="image/jpeg,image/png,image/webp" className="mt-2 block w-full rounded-xl border border-slate-200 p-3 text-sm" /><span className="mt-2 block text-xs text-slate-500">JPG, PNG or WebP, up to 2 MB. Leave empty to keep your current photo.</span><InputError message={errors.photo} /></label>
                     <div className="grid gap-6 sm:grid-cols-2">
                         <label className="text-sm font-medium">Full name<input name="name" defaultValue={auth.user.name} required autoComplete="name" className={field} /><InputError message={errors.name} /></label>

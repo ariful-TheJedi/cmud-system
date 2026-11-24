@@ -5,17 +5,17 @@ namespace App\Models\Institute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class StaffAssignment extends Model
+class StuffAssignment extends Model
 {
     protected $fillable = [
-        'staff_id',
+        'stuff_id',
         'branch_id',
         'department_id',
     ];
 
-    public function staff(): BelongsTo
+    public function stuff(): BelongsTo
     {
-        return $this->belongsTo(Staff::class);
+        return $this->belongsTo(Stuff::class);
     }
 
     public function branch(): BelongsTo

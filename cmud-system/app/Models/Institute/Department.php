@@ -29,9 +29,9 @@ class Department extends Model
         return $this->belongsTo(Institute::class);
     }
 
-    public function staffAssignments(): HasMany
+    public function stuffAssignments(): HasMany
     {
-        return $this->hasMany(StaffAssignment::class);
+        return $this->hasMany(StuffAssignment::class);
     }
 
     public function instituteExpenses(): HasMany

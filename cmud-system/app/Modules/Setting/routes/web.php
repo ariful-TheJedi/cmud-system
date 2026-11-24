@@ -7,18 +7,18 @@ use Illuminate\Auth\Middleware\RequirePassword;
 
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['auth'])->group(function (): void {
     Route::redirect('settings', '/settings/institute');
 
     Route::get('settings/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('settings/profile', [ProfileController::class, 'update'])->name('profile.update');
+
+    Route::inertia('settings/user-control', 'settings/user-control/index')
+        ->name('settings.user-control');
+
+    Route::inertia('settings/finance-control', 'settings/finance-control')
+        ->name('settings.finance-control');
 });
-
-Route::inertia('settings/user-control', 'settings/user-control/index')
-    ->name('settings.user-control');
-
-Route::inertia('settings/finance-control', 'settings/finance-control')
-    ->name('settings.finance-control');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('settings/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

@@ -2,17 +2,18 @@
 
 namespace App\Models\Institute;
 
-use App\Models\Finance\FinancialAccount;
-use App\Models\Finance\InstituteExpense;
-use App\Models\Finance\InstituteExpensePriceVersion;
-use App\Models\Finance\StudentExpense;
-use App\Models\Finance\StudentExpensePriceVersion;
 use App\Models\Academy\Batch;
 use App\Models\Academy\CommunicationGroup;
 use App\Models\Academy\CoursePriceVersion;
 use App\Models\Academy\Enrollment;
 use App\Models\Academy\Student;
 use App\Models\Academy\Teacher;
+use App\Models\Finance\FinancialAccount;
+use App\Models\Finance\InstituteExpense;
+use App\Models\Finance\InstituteExpensePriceVersion;
+use App\Models\Finance\StudentExpense;
+use App\Models\Finance\StudentExpensePriceVersion;
+use App\Models\Security\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -47,9 +48,14 @@ class Branch extends Model
         return $this->hasMany(Room::class);
     }
 
-    public function staffAssignments(): HasMany
+    public function stuffAssignments(): HasMany
     {
-        return $this->hasMany(StaffAssignment::class);
+        return $this->hasMany(StuffAssignment::class);
+    }
+
+    public function users(): HasMany
+    {
+        return $this->hasMany(User::class);
     }
 
     public function teachers(): BelongsToMany

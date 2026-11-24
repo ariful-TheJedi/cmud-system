@@ -5,7 +5,7 @@ namespace App\Models\Academy;
 use App\Models\Finance\InstituteExpense;
 use App\Models\Institute\Branch;
 use App\Models\Institute\Institute;
-use App\Models\Institute\Staff;
+use App\Models\Institute\Stuff;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -15,7 +15,7 @@ class Teacher extends Model
 {
     protected $fillable = [
         'institute_id',
-        'staff_id',
+        'stuff_id',
         'teacher_code',
         'full_name',
         'phone',
@@ -44,10 +44,10 @@ class Teacher extends Model
         return $this->belongsTo(Institute::class);
     }
 
-    /** @return BelongsTo<Staff, $this> */
-    public function staff(): BelongsTo
+    /** @return BelongsTo<Stuff, $this> */
+    public function stuff(): BelongsTo
     {
-        return $this->belongsTo(Staff::class);
+        return $this->belongsTo(Stuff::class);
     }
 
     /** Subjects are the direct teaching assignment targets for a teacher. */

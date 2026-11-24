@@ -1,5 +1,5 @@
-﻿import BillingWorkspace from './billing-workspace';
+import InstituteBillingWorkspace from './institute-billing-workspace';
 
 export default function InstituteBilling() {
-    return <BillingWorkspace mode="institute" />;
+    return <InstituteBillingWorkspace />;
 }

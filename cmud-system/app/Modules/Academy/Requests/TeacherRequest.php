@@ -22,7 +22,7 @@ class TeacherRequest extends FormRequest
 
         return [
             'institute_id' => [$required, 'integer', 'exists:institutes,id'],
-            'staff_id' => ['sometimes', 'nullable', 'integer', 'exists:staff,id'],
+            'stuff_id' => ['sometimes', 'nullable', 'integer', 'exists:stuff,id'],
             'teacher_code' => [$required, 'string', 'max:255', Rule::unique('teachers', 'teacher_code')->ignore($teacher?->id)],
             'full_name' => [$required, 'string', 'max:255'],
             'phone' => [$required, 'string', 'max:30'],

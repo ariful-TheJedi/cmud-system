@@ -10,10 +10,30 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class InstituteExpensePriceVersion extends Model
 {
-    protected $fillable = ['institute_expense_type_id', 'branch_id', 'version_number', 'amount', 'unit_name', 'effective_from', 'effective_to', 'status', 'approved_by', 'approved_at', 'notes'];
-    protected function casts(): array { return ['version_number' => 'integer', 'amount' => 'decimal:2', 'effective_from' => 'date', 'effective_to' => 'date', 'approved_at' => 'datetime']; }
-    public function expenseType(): BelongsTo { return $this->belongsTo(InstituteExpenseType::class, 'institute_expense_type_id'); }
-    public function branch(): BelongsTo { return $this->belongsTo(Branch::class); }
-    public function approver(): BelongsTo { return $this->belongsTo(User::class, 'approved_by'); }
-    public function expenses(): HasMany { return $this->hasMany(InstituteExpense::class); }
+    protected $fillable = ['institute_expense_category_id', 'branch_id', 'version_number', 'amount', 'unit_name', 'effective_from', 'effective_to', 'status', 'approved_by', 'approved_at', 'notes'];
+
+    protected function casts(): array
+    {
+        return ['version_number' => 'integer', 'amount' => 'decimal:2', 'effective_from' => 'date', 'effective_to' => 'date', 'approved_at' => 'datetime'];
+    }
+
+    public function expenseCategory(): BelongsTo
+    {
+        return $this->belongsTo(InstituteExpenseCategory::class, 'institute_expense_category_id');
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
+    public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function expenses(): HasMany
+    {
+        return $this->hasMany(InstituteExpense::class);
+    }
 }

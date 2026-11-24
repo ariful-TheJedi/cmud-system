@@ -8,7 +8,7 @@ use App\Models\Academy\Course;
 use App\Models\Academy\Student;
 use App\Models\Academy\Teacher;
 use App\Models\Finance\FinancialAccount;
-use App\Models\Finance\InstituteExpenseCategory;
+use App\Models\Finance\InstituteExpenseType;
 use App\Models\Finance\PaymentMethod;
 use App\Models\Finance\StudentExpenseType;
 use Illuminate\Database\Eloquent\Model;
@@ -47,9 +47,9 @@ class Institute extends Model
         return $this->hasMany(Department::class);
     }
 
-    public function staff(): HasMany
+    public function stuff(): HasMany
     {
-        return $this->hasMany(Staff::class);
+        return $this->hasMany(Stuff::class);
     }
 
     public function assetCategories(): HasMany
@@ -87,9 +87,9 @@ class Institute extends Model
         return $this->hasMany(StudentExpenseType::class);
     }
 
-    public function instituteExpenseCategories(): HasMany
+    public function instituteExpenseTypes(): HasMany
     {
-        return $this->hasMany(InstituteExpenseCategory::class);
+        return $this->hasMany(InstituteExpenseType::class);
     }
 
     public function paymentMethods(): HasMany

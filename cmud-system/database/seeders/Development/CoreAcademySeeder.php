@@ -14,7 +14,7 @@ class CoreAcademySeeder extends Seeder
         $dhakaBranchId = $this->findId('branches', ['institute_id' => $instituteId, 'code' => 'DEV-BR-DHAKA']);
         $chattogramBranchId = $this->findId('branches', ['institute_id' => $instituteId, 'code' => 'DEV-BR-CHITTAGONG']);
         $operatorId = $this->findId('users', ['email' => 'core.operator@example.invalid']);
-        $staffId = $this->findId('staff', ['staff_code' => 'DEV-STAFF-002']);
+        $stuffId = $this->findId('stuff', ['stuff_code' => 'DEV-STUFF-002']);
 
         $college = $this->saveRow('medical_colleges', ['short_name' => 'CMUD-DEV-MC-01'], [
             'name' => 'Central Demo Medical College',
@@ -119,7 +119,7 @@ class CoreAcademySeeder extends Seeder
 
         $teacher = $this->saveRow('teachers', ['teacher_code' => 'DEV-TEACHER-001'], [
             'institute_id' => $instituteId,
-            'staff_id' => $staffId,
+            'stuff_id' => $stuffId,
             'full_name' => 'Nusrat Jahan',
             'phone' => '+880000000030',
             'email' => 'core.teacher@example.invalid',
