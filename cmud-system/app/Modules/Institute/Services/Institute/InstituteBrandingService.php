@@ -16,6 +16,8 @@ class InstituteBrandingService
         return [
             'institute_id' => $institute?->id,
             'name' => $institute?->name ?? config('app.name'),
+            'phone' => $institute?->phone,
+            'email' => $institute?->email,
             'logo_url' => $institute?->logo_path ? Storage::disk('public')->url($institute->logo_path) : '/apple-touch-icon.png',
             'site_icon_url' => $institute?->logo_path ? Storage::disk('public')->url($institute->logo_path) : '/apple-touch-icon.png',
             'custom_site_icon' => (bool) $institute?->logo_path,

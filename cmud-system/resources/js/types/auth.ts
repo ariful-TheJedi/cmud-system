@@ -4,6 +4,7 @@ export type User = {
     full_name?: string | null;
     username?: string | null;
     designation?: string | null;
+    branch?: { id: number; name: string; code: string | null } | null;
     email: string;
     avatar?: string;
     email_verified_at: string | null;

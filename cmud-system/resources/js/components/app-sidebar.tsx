@@ -16,6 +16,7 @@ import {
     BriefcaseBusiness,
     Building2,
     Users,
+    Boxes,
 } from 'lucide-react';
 import { NavMain } from '@/components/nav-main';
 import {
@@ -71,6 +72,9 @@ export function AppSidebar() {
                 <NavMain title="Finance" icon={Wallet} items={[
                     { title: 'Student revenue', href: '/finance/student-revenue', icon: CreditCard },
                     { title: 'Institute expenditure', href: '/finance/institute-expenditure', icon: ReceiptText },
+                ]} />
+                <NavMain items={[
+                    { title: 'Inventory', href: '/inventory', icon: Boxes },
                 ]} />
                 <NavMain title="Settings" variant="settings" icon={Settings} className="mt-auto" items={[
                     { title: 'Profile', href: '/settings/profile', icon: Users },

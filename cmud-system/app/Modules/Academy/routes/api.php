@@ -12,6 +12,7 @@ use App\Modules\Academy\Controllers\Enrollments\StudentEnrollmentController;
 use App\Modules\Academy\Controllers\Students\StudentController;
 use App\Modules\Academy\Controllers\Students\StudentUpdateController;
 use App\Modules\Academy\Controllers\Teachers\TeacherManagementController;
+use App\Modules\Finance\Controllers\StudentEnrollmentBillingController;
 use App\Modules\Finance\Controllers\StudentFinancialOverviewController;
 use App\Modules\Finance\Controllers\StudentPaymentHistoryController;
 use Illuminate\Support\Facades\Route;
@@ -58,18 +59,21 @@ Route::prefix('academy-catalog')->name('academy.catalog.')->controller(AcademyCa
 });
 
 // Student lookup and the separate academic, financial, certificate, and payment views.
+// Keep the static path above students/{studentCode} so it is not captured as a student code.
+Route::get('students/search', [StudentEnrollmentBillingController::class, 'search'])
+    ->middleware(['web', 'auth'])->name('students.finance.search');
 Route::get('students', [StudentController::class, 'index'])->name('students.index');
 Route::get('students/{studentCode}', [StudentController::class, 'show'])->name('students.show');
 Route::get('students/{studentCode}/academic', [StudentAcademicOverviewController::class, 'student'])
     ->name('students.academic');
 Route::get('students/{studentCode}/financial-summary', [StudentFinancialOverviewController::class, 'student'])
-    ->name('students.financial-summary');
+    ->middleware(['web', 'auth'])->name('students.financial-summary');
 Route::get('students/{studentCode}/certificates', [CertificateOverviewController::class, 'student'])
     ->name('students.certificates');
 Route::get('students/{studentCode}/payments', [StudentPaymentHistoryController::class, 'index'])
-    ->name('students.payments');
+    ->middleware(['web', 'auth'])->name('students.payments');
 Route::get('students/{studentCode}/payments/summary', [StudentPaymentHistoryController::class, 'summary'])
-    ->name('students.payments.summary');
+    ->middleware(['web', 'auth'])->name('students.payments.summary');
 Route::post('students/admissions', [StudentAdmissionController::class, 'store'])
     ->name('students.admissions.store');
 // Keep the singular path as a compatibility alias for existing admission clients.
@@ -90,14 +94,15 @@ Route::patch('enrollments/{enrollment}/status', [EnrollmentController::class, 'u
 Route::get('enrollments/{enrollment}/academic', [StudentAcademicOverviewController::class, 'enrollment'])
     ->name('enrollments.academic');
 Route::get('enrollments/{enrollment}/financial-summary', [StudentFinancialOverviewController::class, 'enrollment'])
-    ->name('enrollments.financial-summary');
+    ->middleware(['web', 'auth'])->name('enrollments.financial-summary');
 Route::get('enrollments/{enrollment}/certificates', [CertificateOverviewController::class, 'enrollment'])
     ->name('enrollments.certificates');
 Route::get('certificates/{certificate}', [CertificateOverviewController::class, 'show'])
     ->name('certificates.show');
 // Payment keys use a source prefix, such as tuition-42 or expense-42, to identify the table.
 Route::get('student-payments/{paymentKey}', [StudentPaymentHistoryController::class, 'show'])
-    ->name('student-payments.show');
+    ->where('paymentKey', '(tuition|expense)-[0-9]+')
+    ->middleware(['web', 'auth'])->name('student-payments.show');
 
 // Academic routes operate on the selected enrollment and its own stage records.
 Route::prefix('enrollments/{enrollment}')

@@ -27,8 +27,12 @@ class InstituteBillStoreRequest extends FormRequest
             'amount' => ['required', 'numeric', 'decimal:0,2', 'gt:0', 'max:9999999999.99'],
             'billing_date' => ['required', 'date'],
             'due_date' => ['sometimes', 'nullable', 'date', 'after_or_equal:billing_date'],
-            'status' => ['sometimes', 'in:draft,approved,cancelled'],
+            'status' => ['sometimes', 'in:pending,approved,cancelled'],
             'notes' => ['sometimes', 'nullable', 'string'],
+            // Bill creation supports a cash payment only for the current release.
+            'cash_payment' => ['sometimes', 'nullable', 'array'],
+            'cash_payment.amount' => ['required_with:cash_payment', 'numeric', 'decimal:0,2', 'gt:0', 'max:9999999999.99'],
+            'cash_payment.financial_account_id' => ['required_with:cash_payment', 'integer', 'exists:financial_accounts,id'],
         ];
     }
 }

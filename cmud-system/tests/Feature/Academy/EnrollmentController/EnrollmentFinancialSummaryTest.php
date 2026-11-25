@@ -8,6 +8,7 @@ class EnrollmentFinancialSummaryTest extends StudentOverviewTestCase
 {
     public function test_financial_summary_uses_only_approved_waivers_and_confirmed_payments(): void
     {
+        $this->actingAs($this->user);
         $course = $this->createCourse('FINANCIAL-A');
         $batch = $this->createBatch($course, 'FINANCIAL-A');
         $enrollment = $this->createEnrollment($course, $batch, 'FINANCIAL-A');
@@ -29,6 +30,7 @@ class EnrollmentFinancialSummaryTest extends StudentOverviewTestCase
 
     public function test_student_financial_summary_is_separate_per_enrollment_and_marks_overdue_bills(): void
     {
+        $this->actingAs($this->user);
         $firstCourse = $this->createCourse('FINANCIAL-STUDENT-A');
         $firstBatch = $this->createBatch($firstCourse, 'FINANCIAL-STUDENT-A');
         $firstEnrollment = $this->createEnrollment($firstCourse, $firstBatch, 'FINANCIAL-STUDENT-A');
@@ -52,6 +54,7 @@ class EnrollmentFinancialSummaryTest extends StudentOverviewTestCase
 
     public function test_enrollment_summary_includes_stage_expenses_in_payable_balance_and_due_status(): void
     {
+        $this->actingAs($this->user);
         $course = $this->createCourse('FINANCIAL-EXPENSE');
         $batch = $this->createBatch($course, 'FINANCIAL-EXPENSE');
         $enrollment = $this->createEnrollment($course, $batch, 'FINANCIAL-EXPENSE');

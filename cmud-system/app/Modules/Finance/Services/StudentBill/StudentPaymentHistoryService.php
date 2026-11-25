@@ -1,10 +1,11 @@
 <?php
 
-namespace App\Modules\Finance\Services;
+namespace App\Modules\Finance\Services\StudentBill;
 
 use App\Models\Academy\Student;
 use App\Models\Finance\StudentExpensePayment;
 use App\Models\Finance\StudentTuitionPayment;
+use App\Models\Security\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
@@ -15,11 +16,11 @@ class StudentPaymentHistoryService
     /** @param array<string, mixed> $filters
      * @return array{data: array<int, array<string, mixed>>, total: int}
      */
-    public function list(Student $student, array $filters): array
+    public function list(Student $student, array $filters, User $viewer): array
     {
         $rows = collect([
-            ...$this->tuitionPayments($student, $filters),
-            ...$this->expensePayments($student, $filters),
+            ...$this->tuitionPayments($student, $filters, $viewer),
+            ...$this->expensePayments($student, $filters, $viewer),
         ])->sortByDesc('paid_at')->values();
         $perPage = min(max((int) ($filters['per_page'] ?? 25), 1), 100);
         $page = max((int) ($filters['page'] ?? 1), 1);
@@ -31,11 +32,11 @@ class StudentPaymentHistoryService
     }
 
     /** @return array{valid_payment_count: int, valid_amount: string} */
-    public function summary(Student $student): array
+    public function summary(Student $student, User $viewer): array
     {
         $rows = collect([
-            ...$this->tuitionPayments($student, []),
-            ...$this->expensePayments($student, []),
+            ...$this->tuitionPayments($student, [], $viewer),
+            ...$this->expensePayments($student, [], $viewer),
         ])->where('is_valid', true);
         $amountCents = $rows->sum(fn (array $payment): int => $this->toCents($payment['amount']));
 
@@ -46,13 +47,14 @@ class StudentPaymentHistoryService
     }
 
     /** @return array<string, mixed> */
-    public function find(string $paymentKey): array
+    public function find(string $paymentKey, User $viewer): array
     {
         if (preg_match('/^tuition-(\d+)$/', $paymentKey, $matches) === 1) {
             $payment = StudentTuitionPayment::query()
                 ->whereKey((int) $matches[1])
                 ->with(['tuition.enrollment.course', 'paymentMethod'])
                 ->firstOrFail();
+            $this->assertBranchAccess((int) $payment->tuition?->enrollment?->branch_id, $viewer);
 
             return $this->formatTuitionPayment($payment);
         }
@@ -62,6 +64,13 @@ class StudentPaymentHistoryService
                 ->whereKey((int) $matches[1])
                 ->with(['expense.enrollment.course', 'expense.stageRecord.enrollment.course', 'paymentMethod'])
                 ->firstOrFail();
+            $expense = $payment->expense;
+            if ($expense === null) {
+                abort(404, 'Student payment not found.');
+            }
+            $enrollment = $expense->enrollment ?? $expense->stageRecord?->enrollment;
+            $branchId = $enrollment->branch_id ?? $expense->branch_id;
+            $this->assertBranchAccess((int) $branchId, $viewer);
 
             return $this->formatExpensePayment($payment);
         }
@@ -74,11 +83,12 @@ class StudentPaymentHistoryService
     /** @param array<string, mixed> $filters
      * @return array<int, array<string, mixed>>
      */
-    private function tuitionPayments(Student $student, array $filters): array
+    private function tuitionPayments(Student $student, array $filters, User $viewer): array
     {
         $query = StudentTuitionPayment::query()
             ->whereHas('tuition', fn ($tuition) => $tuition->whereHas('enrollment', fn ($enrollment) => $enrollment
-                ->where('student_id', $student->id)))
+                ->where('student_id', $student->id)
+                ->when(! $viewer->is_super_admin, fn ($query) => $query->where('branch_id', $viewer->branch_id))))
             ->with(['tuition.enrollment.course', 'paymentMethod']);
         $this->applyFilters($query, $filters, 'tuition.enrollment');
 
@@ -88,10 +98,11 @@ class StudentPaymentHistoryService
     /** @param array<string, mixed> $filters
      * @return array<int, array<string, mixed>>
      */
-    private function expensePayments(Student $student, array $filters): array
+    private function expensePayments(Student $student, array $filters, User $viewer): array
     {
         $query = StudentExpensePayment::query()
-            ->whereHas('expense', fn ($expense) => $expense->where('student_id', $student->id))
+            ->whereHas('expense', fn ($expense) => $expense->where('student_id', $student->id)
+                ->when(! $viewer->is_super_admin, fn ($query) => $query->where('branch_id', $viewer->branch_id)))
             ->with(['expense.enrollment.course', 'expense.stageRecord.enrollment.course', 'paymentMethod']);
         $this->applyFilters($query, $filters, 'expense.enrollment', true);
 
@@ -214,5 +225,13 @@ class StudentPaymentHistoryService
         [$whole, $fraction] = array_pad(explode('.', trim((string) $value), 2), 2, '');
 
         return ((int) $whole * 100) + (int) str_pad(substr($fraction, 0, 2), 2, '0');
+    }
+
+    /** Hide a payment receipt unless its enrollment belongs to the viewer's branch. */
+    private function assertBranchAccess(int $branchId, User $viewer): void
+    {
+        if (! $viewer->is_super_admin && ($viewer->branch_id === null || $branchId !== (int) $viewer->branch_id)) {
+            abort(404, 'Student payment not found.');
+        }
     }
 }

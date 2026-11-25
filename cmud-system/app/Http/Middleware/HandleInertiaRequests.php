@@ -37,6 +37,8 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         $branding = app(InstituteBrandingService::class)->get();
+        // Share the assigned branch so branch-specific documents can identify their office.
+        $user = $request->user()?->loadMissing('branch:id,name,code');
         view()->share('branding', $branding);
 
         return [
@@ -44,7 +46,7 @@ class HandleInertiaRequests extends Middleware
             'branding' => $branding,
             'name' => config('app.name'),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user,
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];

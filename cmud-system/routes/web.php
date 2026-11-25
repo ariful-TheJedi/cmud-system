@@ -41,10 +41,13 @@ Route::middleware(['auth'])->group(function (): void {
     Route::inertia('/academy/class-routine', 'academy/class-routine')
         ->name('academy.class-routine');
 
-    // Demo billing screens; payment APIs will be integrated separately.
+    // Student billing consumes the enrollment-scoped Finance API; institute billing has its own workspace.
     Route::redirect('/billings', '/billings/student-bill')->name('billings.index');
     Route::inertia('/billings/student-bill', 'billings/student-bill')->name('billings.student-bill');
     Route::inertia('/billings/institute-billing', 'billings/institute-billing')->name('billings.institute-billing');
+
+    // Inventory has its own authenticated page while the module workflows are built out.
+    Route::inertia('/inventory', 'inventory/index')->name('inventory.index');
 
     // Demo finance reports; API integration will follow.
     Route::redirect('/finance', '/finance/student-revenue')->name('finance.index');

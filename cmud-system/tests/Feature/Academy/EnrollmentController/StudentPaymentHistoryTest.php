@@ -8,6 +8,7 @@ class StudentPaymentHistoryTest extends StudentOverviewTestCase
 {
     public function test_student_payment_history_combines_sources_without_duplicates_and_supports_filters(): void
     {
+        $this->actingAs($this->user);
         $firstCourse = $this->createCourse('PAYMENT-A');
         $firstBatch = $this->createBatch($firstCourse, 'PAYMENT-A');
         $firstEnrollment = $this->createEnrollment($firstCourse, $firstBatch, 'PAYMENT-A');
@@ -81,6 +82,7 @@ class StudentPaymentHistoryTest extends StudentOverviewTestCase
 
     public function test_course_filter_matches_expenses_attached_through_stage_records(): void
     {
+        $this->actingAs($this->user);
         $course = $this->createCourse('PAYMENT-STAGE-FILTER');
         $batch = $this->createBatch($course, 'PAYMENT-STAGE-FILTER');
         $enrollment = $this->createEnrollment($course, $batch, 'PAYMENT-STAGE-FILTER');

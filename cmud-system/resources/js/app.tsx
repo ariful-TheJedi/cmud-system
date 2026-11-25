@@ -22,6 +22,7 @@ import UserControl from './pages/settings/user-control/index';
 import FinanceControl from './pages/settings/finance-control';
 import StuffPage from './pages/stuff';
 import Login from './pages/auth/login';
+import Inventory from './pages/inventory/index';
 
 const appName = import.meta.env.VITE_APP_NAME || 'CMUD System';
 const pages = {
@@ -48,6 +49,7 @@ const pages = {
     'academy/class-routine': ClassRoutine,
     'settings/user-control/index': UserControl,
     'settings/finance-control': FinanceControl,
+    'inventory/index': Inventory,
 };
 
 void createInertiaApp({

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Modules\Finance\Services;
+namespace App\Modules\Finance\Services\StudentBill;
 
 use App\Models\Academy\Enrollment;
 use App\Models\Academy\Student;
@@ -9,6 +9,7 @@ use App\Models\Finance\StudentExpense;
 use App\Models\Finance\StudentExpensePayment;
 use App\Models\Finance\StudentTuition;
 use App\Models\Finance\StudentTuitionPayment;
+use App\Models\Security\User;
 use Illuminate\Support\Carbon;
 
 class StudentFinancialOverviewService
@@ -16,18 +17,52 @@ class StudentFinancialOverviewService
     /**
      * Read current tuition and student-expense balances for follow-up and eligibility decisions.
      *
-     * @return array{student_code: string, totals: array<string, string>, enrollments: array<int, array<string, mixed>>}
+     * @return array{
+     *   student_code: string,
+     *   totals: array<string, string>,
+     *   enrollments: array<int, array{
+     *     enrollment_id: int,
+     *     enrollment_code: string,
+     *     enrollment_status: string,
+     *     course: array<string, mixed>|null,
+     *     total_course_fee: string,
+     *     additional_fees: string,
+     *     approved_waiver: string,
+     *     payable_fee: string,
+     *     total_paid: string,
+     *     outstanding_due: string,
+     *     financial_status: string|null
+     *   }>
+     * }
      */
-    public function forStudent(Student $student): array
+    public function forStudent(Student $student, ?User $viewer = null): array
     {
         $expensesByEnrollment = [];
-        foreach ($student->expenses()->with(['payments', 'stageRecord.enrollment'])->get() as $expense) {
+        $expenses = $student->expenses()->with(['payments', 'stageRecord.enrollment']);
+        if ($viewer !== null && ! $viewer->is_super_admin) {
+            $expenses->where('branch_id', $viewer->branch_id);
+        }
+        foreach ($expenses->get() as $expense) {
             $enrollmentId = $expense->enrollment_id ?? $expense->stageRecord?->enrollment_id;
             if ($enrollmentId !== null) {
                 $expensesByEnrollment[(int) $enrollmentId][] = $expense;
             }
         }
 
+        /** @var array<int, array{
+         *   enrollment_id: int,
+         *   enrollment_code: string,
+         *   enrollment_status: string,
+         *   course: array<string, mixed>|null,
+         *   total_course_fee: string,
+         *   additional_fees: string,
+         *   approved_waiver: string,
+         *   payable_fee: string,
+         *   total_paid: string,
+         *   outstanding_due: string,
+         *   financial_status: string|null
+         * }> $summaries
+         */
         $summaries = [];
         $totals = [
             'total_course_fee' => 0,
@@ -38,7 +73,15 @@ class StudentFinancialOverviewService
             'outstanding_due' => 0,
         ];
 
-        foreach ($student->enrollments()->with(['course:id,code,name', 'tuition.payments'])->orderByDesc('id')->get() as $enrollment) {
+        $enrollments = $student->enrollments()->with(['course:id,code,name', 'tuition.payments']);
+        if ($viewer !== null && ! $viewer->is_super_admin) {
+            $enrollments->where('branch_id', $viewer->branch_id);
+        }
+        $visibleEnrollments = $enrollments->orderByDesc('id')->get();
+        if ($viewer !== null && ! $viewer->is_super_admin && $visibleEnrollments->isEmpty()) {
+            abort(404, 'Student not found.');
+        }
+        foreach ($visibleEnrollments as $enrollment) {
             $tuition = $enrollment->tuition;
             $courseFee = 0;
             $additionalFees = 0;
@@ -112,9 +155,50 @@ class StudentFinancialOverviewService
         ];
     }
 
-    /** @return array<string, mixed>|null */
-    public function forEnrollment(Enrollment $enrollment): ?array
+    /**
+     * @return array{
+     *   enrollment_id: int,
+     *   enrollment_code: string,
+     *   enrollment_status: string,
+     *   course: array<string, mixed>|null,
+     *   total_course_fee: string,
+     *   additional_fees: string,
+     *   approved_waiver: string,
+     *   payable_fee: string,
+     *   total_paid: string,
+     *   outstanding_due: string,
+     *   financial_status: string|null,
+     *   bill: array{
+     *     tuition_number: string,
+     *     status: string,
+     *     is_cancelled: bool,
+     *     original_amount: string,
+     *     approved_waiver: string,
+     *     payable_amount: string,
+     *     due_on: string|null,
+     *     payments: array<int, array{amount: string, status: string}>
+     *   }|null,
+     *   other_bills: array<int, array{
+     *     expense_number: string,
+     *     description: string,
+     *     status: string,
+     *     is_cancelled: bool,
+     *     issued_on: string,
+     *     due_on: string|null,
+     *     amount: string,
+     *     approved_waiver: string,
+     *     payable_amount: string,
+     *     outstanding_due: string,
+     *     payments: array<int, array{amount: string, status: string}>
+     *   }>
+     * }|null
+     */
+    public function forEnrollment(Enrollment $enrollment, ?User $viewer = null): ?array
     {
+        if ($viewer !== null && ! $viewer->is_super_admin
+            && ($viewer->branch_id === null || (int) $viewer->branch_id !== (int) $enrollment->branch_id)) {
+            abort(404, 'Enrollment not found.');
+        }
         $summary = collect($this->forStudent($enrollment->student)['enrollments'])
             ->firstWhere('enrollment_id', $enrollment->id);
 
@@ -138,19 +222,20 @@ class StudentFinancialOverviewService
             ...$summary,
             'bill' => $tuition ? [
                 'tuition_number' => $tuition->tuition_number,
-                'status' => $tuition->getRawOriginal('status'),
+                'status' => (string) $tuition->getRawOriginal('status'),
+                'is_cancelled' => $this->isCancelled($tuition),
                 'original_amount' => (string) $tuition->original_amount,
                 'approved_waiver' => $this->formatCents($this->tuitionWaiverCents($tuition)),
-                'payable_amount' => $this->formatCents(max(
+                'payable_amount' => $this->formatCents($this->isCancelled($tuition) ? 0 : max(
                     0,
                     $this->toCents($tuition->original_amount) - $this->tuitionWaiverCents($tuition),
                 )),
                 'due_on' => $tuition->getRawOriginal('due_on'),
                 'payments' => $tuition->payments->map(fn (StudentTuitionPayment $payment): array => [
                     'payment_number' => $payment->payment_number,
-                    'amount' => $payment->amount,
+                    'amount' => $this->formatCents($this->toCents($payment->amount)),
                     'paid_at' => Carbon::parse((string) $payment->getRawOriginal('paid_at'))->toIso8601String(),
-                    'status' => $payment->getRawOriginal('status'),
+                    'status' => (string) $payment->getRawOriginal('status'),
                     'transaction_reference' => $payment->transaction_reference,
                     'receipt_path' => $payment->proof_file_path,
                     'payment_method' => $payment->paymentMethod?->name,
@@ -162,7 +247,8 @@ class StudentFinancialOverviewService
                 return [
                     'expense_number' => $expense->expense_number,
                     'description' => $expense->description,
-                    'status' => $expense->getRawOriginal('status'),
+                    'status' => (string) $expense->getRawOriginal('status'),
+                    'is_cancelled' => $this->isCancelled($expense),
                     'issued_on' => $expense->getRawOriginal('issued_on'),
                     'due_on' => $expense->getRawOriginal('due_on'),
                     'amount' => $this->formatCents($this->expenseGrossCents($expense)),
@@ -171,9 +257,9 @@ class StudentFinancialOverviewService
                     'outstanding_due' => $this->formatCents($balance['due_cents']),
                     'payments' => $expense->payments->map(fn (StudentExpensePayment $payment): array => [
                         'payment_number' => $payment->payment_number,
-                        'amount' => $payment->amount,
+                        'amount' => $this->formatCents($this->toCents($payment->amount)),
                         'paid_at' => Carbon::parse((string) $payment->getRawOriginal('paid_at'))->toIso8601String(),
-                        'status' => $payment->getRawOriginal('status'),
+                        'status' => (string) $payment->getRawOriginal('status'),
                         'transaction_reference' => $payment->transaction_reference,
                         'receipt_path' => $payment->proof_file_path,
                         'payment_method' => $payment->paymentMethod?->name,

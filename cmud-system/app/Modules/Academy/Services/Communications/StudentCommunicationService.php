@@ -10,7 +10,7 @@ use App\Models\Academy\StudentCommunication;
 use App\Models\Academy\StudentGroupMembership;
 use App\Models\Institute\Branch;
 use App\Modules\Academy\Services\AcademicProgress\AcademicProgressService;
-use App\Modules\Finance\Services\StudentFinancialOverviewService;
+use App\Modules\Finance\Services\StudentBill\StudentFinancialOverviewService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;

@@ -6,3 +6,7 @@
 
 2. a particular branch user can't have accessd to another branch data
 
+3. the bill iussuer only can change the bill status the bill he generated 
+no other user can except the super admin
+
+4. 

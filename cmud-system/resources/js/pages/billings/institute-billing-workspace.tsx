@@ -6,16 +6,20 @@ import {
     type FormEvent,
 } from 'react';
 import { Head, usePage } from '@inertiajs/react';
+import { createPortal } from 'react-dom';
 import {
     CalendarDays,
+    Banknote,
     Eye,
     FileText,
     FilterX,
     LoaderCircle,
+    Pencil,
     Plus,
     Printer,
     ReceiptText,
     Search,
+    Save,
     X,
 } from 'lucide-react';
 import {
@@ -41,7 +45,12 @@ type BillingRecord = {
     id: number;
     expense_number: string;
     billing_name: string;
-    type: { id: number; name: string; category: string | null } | null;
+    type: {
+        id: number;
+        institute_id: number;
+        name: string;
+        category: string | null;
+    } | null;
     payee_name: string;
     invoice_number: string | null;
     branch: { id: number; name: string; code: string | null } | null;
@@ -53,6 +62,7 @@ type BillingRecord = {
     balance: string;
     payment_status: 'unpaid' | 'partial' | 'paid';
     approval_status: string;
+    created_by_id: number | null;
     created_by_name: string | null;
     created_by_designation: string | null;
     created_by_employee_id: string | null;
@@ -63,6 +73,7 @@ type BillingRecord = {
         amount: string;
         paid_at: string;
         payment_method: string | null;
+        financial_account: string | null;
         transaction_reference: string | null;
         status: string;
     }>;
@@ -99,6 +110,13 @@ type DepartmentOption = {
     name: string;
     code: string;
 };
+type CashAccountOption = {
+    id: number;
+    institute_id: number;
+    branch_id: number | null;
+    name: string;
+    code: string;
+};
 type ApiEnvelope<T> = { data: T; message?: string };
 type BillRegister = ApiEnvelope<BillingRecord[]> & {
     meta: {
@@ -112,6 +130,7 @@ type BillOptions = {
     types: BillTypeOption[];
     branches: BranchOption[];
     departments: DepartmentOption[];
+    cash_accounts: CashAccountOption[];
     payees: string[];
 };
 type DateFilterMode = 'single' | 'range';
@@ -124,12 +143,16 @@ type BillForm = {
     branchId: string;
     billingDate: string;
     dueDate: string;
-    status: 'draft' | 'approved' | 'cancelled';
+    status: 'pending' | 'approved' | 'cancelled';
+    cashPayment: boolean;
+    cashPaymentAmount: string;
+    cashAccountId: string;
     amount: string;
     quantity: string;
     description: string;
     notes: string;
 };
+type ApprovalStatus = 'draft' | 'pending' | 'approved' | 'cancelled';
 
 const emptyForm: BillForm = {
     billName: '',
@@ -140,7 +163,10 @@ const emptyForm: BillForm = {
     branchId: '',
     billingDate: '',
     dueDate: '',
-    status: 'draft',
+    status: 'pending',
+    cashPayment: false,
+    cashPaymentAmount: '',
+    cashAccountId: '',
     amount: '',
     quantity: '1',
     description: '',
@@ -178,16 +204,27 @@ function requestErrorMessage(error: unknown): string {
 /** Use the Finance API as the sole source of Institute Billing records and options. */
 export default function InstituteBillingWorkspace() {
     const { request } = useApi();
-    const { auth } = usePage<{ auth: Auth }>().props;
+    const { auth, branding } = usePage<{
+        auth: Auth;
+        branding?: {
+            phone: string | null;
+            email: string | null;
+            logo_url: string;
+            name: string;
+        };
+    }>().props;
     const currentUser = auth.user;
-    const currentBranchId = typeof currentUser.branch_id === 'number'
-        ? currentUser.branch_id
-        : null;
+    const isSuperUser = currentUser.is_super_admin === true;
+    const currentBranchId =
+        !isSuperUser && typeof currentUser.branch_id === 'number'
+            ? currentUser.branch_id
+            : null;
     const [records, setRecords] = useState<BillingRecord[]>([]);
     const [options, setOptions] = useState<BillOptions>({
         types: [],
         branches: [],
         departments: [],
+        cash_accounts: [],
         payees: [],
     });
     const [billingItems, setBillingItems] = useState<BillItemOption[]>([]);
@@ -203,7 +240,9 @@ export default function InstituteBillingWorkspace() {
     const [singleDate, setSingleDate] = useState('');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
-    const [dialog, setDialog] = useState<'create' | 'details' | null>(null);
+    const [dialog, setDialog] = useState<
+        'create' | 'details' | 'status' | 'payment' | null
+    >(null);
     const [selectedId, setSelectedId] = useState<number | null>(null);
     const [selectedRecord, setSelectedRecord] = useState<BillingRecord | null>(
         null,
@@ -215,6 +254,8 @@ export default function InstituteBillingWorkspace() {
     const [optionsLoading, setOptionsLoading] = useState(true);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [statusSaving, setStatusSaving] = useState(false);
+    const [paymentSaving, setPaymentSaving] = useState(false);
     const [detailsLoading, setDetailsLoading] = useState(false);
     const [requestError, setRequestError] = useState('');
     const [formError, setFormError] = useState('');
@@ -335,13 +376,24 @@ export default function InstituteBillingWorkspace() {
     ]);
 
     const typeOptions = useMemo(() => options.types, [options.types]);
-    const currentBranch = options.branches.find(
-        (branch) => branch.id === currentBranchId,
-    ) ?? null;
+    const currentBranch =
+        options.branches.find((branch) => branch.id === currentBranchId) ??
+        null;
     const selectedItem =
         selectedBillingItem?.id === Number(form.billingItemId)
             ? selectedBillingItem
             : null;
+    const cashAccountOptions = useMemo(
+        () =>
+            options.cash_accounts.filter(
+                (account) =>
+                    account.institute_id === selectedItem?.institute_id &&
+                    (!form.branchId ||
+                        account.branch_id === null ||
+                        String(account.branch_id) === form.branchId),
+            ),
+        [form.branchId, options.cash_accounts, selectedItem?.institute_id],
+    );
     const selectedItemPriceOptions = useMemo(
         () =>
             (selectedItem?.prices ?? []).filter(
@@ -363,6 +415,26 @@ export default function InstituteBillingWorkspace() {
         selectedItemPriceOptions.find(
             (price) => String(price.id) === form.priceVersionId,
         ) ?? preferredPrice;
+    const billTotalAmount = selectedItem?.is_other
+        ? Number(form.amount || 0) * Number(form.quantity || 0)
+        : Number(selectedPrice?.amount || 0) * Number(form.quantity || 0);
+    const selectedRecordCashAccounts = useMemo(
+        () =>
+            options.cash_accounts.filter(
+                (account) =>
+                    account.institute_id ===
+                        selectedRecord?.type?.institute_id &&
+                    (selectedRecord.branch
+                        ? account.branch_id === null ||
+                          account.branch_id === selectedRecord.branch.id
+                        : true),
+            ),
+        [
+            options.cash_accounts,
+            selectedRecord?.branch,
+            selectedRecord?.type?.institute_id,
+        ],
+    );
 
     // Keep the selected price in sync whenever category, branch, or billing date changes.
     useEffect(() => {
@@ -372,6 +444,24 @@ export default function InstituteBillingWorkspace() {
             setForm((current) => ({ ...current, priceVersionId: nextPriceId }));
         }
     }, [form.priceVersionId, preferredPrice, selectedItem?.is_other]);
+
+    // Keep the selected cash account valid when the billing item or institute changes.
+    useEffect(() => {
+        if (!form.cashPayment) return;
+
+        const accountIsAvailable = cashAccountOptions.some(
+            (account) => String(account.id) === form.cashAccountId,
+        );
+        if (!accountIsAvailable) {
+            const nextAccountId = String(cashAccountOptions[0]?.id ?? '');
+            if (form.cashAccountId !== nextAccountId) {
+                setForm((current) => ({
+                    ...current,
+                    cashAccountId: nextAccountId,
+                }));
+            }
+        }
+    }, [cashAccountOptions, form.cashAccountId, form.cashPayment]);
 
     // Fetch full payment and detail information only when the user opens a specific bill.
     useEffect(() => {
@@ -434,6 +524,14 @@ export default function InstituteBillingWorkspace() {
         setDialog('details');
     }
 
+    /** Open the independent status editor from the register action column. */
+    function openStatusEditor(record: BillingRecord) {
+        setSelectedId(record.id);
+        setSelectedRecord(record);
+        setFormError('');
+        setDialog('status');
+    }
+
     async function submitBill(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setSaving(true);
@@ -459,6 +557,14 @@ export default function InstituteBillingWorkspace() {
                 due_date: form.dueDate || null,
                 status: form.status,
                 notes: form.notes.trim() || null,
+                ...(form.cashPayment
+                    ? {
+                          cash_payment: {
+                              amount: form.cashPaymentAmount,
+                              financial_account_id: Number(form.cashAccountId),
+                          },
+                      }
+                    : {}),
             };
             const { data } = await request<ApiEnvelope<BillingRecord>>(
                 '/institute-bills',
@@ -469,13 +575,91 @@ export default function InstituteBillingWorkspace() {
             );
 
             setDialog(null);
-            setNotice(`${data.data.invoice_number ?? data.data.id} was created as ${data.data.approval_status}.`);
+            const paymentMessage = form.cashPayment
+                ? ` A cash payment of ${money(form.cashPaymentAmount)} was recorded.`
+                : '';
+            setNotice(
+                `${data.data.invoice_number ?? data.data.id} was created as ${data.data.approval_status}.${paymentMessage}`,
+            );
             clearFilters();
             setRefreshKey((current) => current + 1);
         } catch (error) {
             setFormError(requestErrorMessage(error));
         } finally {
             setSaving(false);
+        }
+    }
+
+    /** Send a bill approval-state change through the Finance status endpoint. */
+    async function updateBillStatus(
+        status: ApprovalStatus,
+        cancellationReason: string,
+    ) {
+        if (selectedId === null) return;
+
+        setStatusSaving(true);
+        setFormError('');
+        try {
+            const { data } = await request<ApiEnvelope<BillingRecord>>(
+                `/institute-bills/${selectedId}/status`,
+                {
+                    method: 'PATCH',
+                    data: {
+                        status,
+                        ...(status === 'cancelled'
+                            ? {
+                                  cancellation_reason:
+                                      cancellationReason.trim() || null,
+                              }
+                            : {}),
+                    },
+                },
+            );
+
+            setSelectedRecord(data.data);
+            setNotice(
+                `${data.data.invoice_number ?? data.data.id} status updated to ${data.data.approval_status}.`,
+            );
+            setDialog(null);
+            setRefreshKey((current) => current + 1);
+        } catch (error) {
+            setFormError(requestErrorMessage(error));
+        } finally {
+            setStatusSaving(false);
+        }
+    }
+
+    /** Record cash against an approved bill through the Finance API. */
+    async function recordBillCashPayment(
+        amount: string,
+        financialAccountId: string,
+    ) {
+        if (selectedId === null) return;
+
+        setPaymentSaving(true);
+        setFormError('');
+        try {
+            const { data } = await request<ApiEnvelope<BillingRecord>>(
+                `/institute-bills/${selectedId}/payments`,
+                {
+                    method: 'POST',
+                    data: {
+                        amount,
+                        financial_account_id: Number(financialAccountId),
+                    },
+                },
+            );
+
+            setSelectedRecord(data.data);
+            setNotice(
+                `Cash payment of ${money(amount)} recorded. Remaining balance: ${money(data.data.balance)}.`,
+            );
+            setDialog(null);
+            setRefreshKey((current) => current + 1);
+        } catch (error) {
+            setFormError(requestErrorMessage(error));
+        } finally {
+            setPaymentSaving(false);
         }
     }
 
@@ -503,13 +687,22 @@ export default function InstituteBillingWorkspace() {
             <style>{`
                 @media print {
                     body * { visibility: hidden !important; }
+                    body[data-billing-print="record"] > #app { display: none !important; }
                     body[data-billing-print="record"] .billing-print-record-document,
                     body[data-billing-print="record"] .billing-print-record-document * { visibility: visible !important; }
-                    body[data-billing-print="record"] .billing-print-record-document { display: block !important; position: absolute !important; inset: 0 auto auto 0 !important; width: 100% !important; max-width: none !important; padding: 0 !important; color: #111827 !important; background: white !important; font-size: 10pt !important; }
-                    .billing-print-record-document table { page-break-inside: auto; }
-                    .billing-print-record-document tr, .billing-print-record-document section, .billing-print-record-document header { page-break-inside: avoid; }
+                    body[data-billing-print="record"] .billing-print-record-document { display: flex !important; flex-direction: column !important; position: absolute !important; inset: 0 auto auto 0 !important; box-sizing: border-box !important; width: 100% !important; height: 281mm !important; max-height: 281mm !important; overflow: hidden !important; padding: 0 !important; color: #111827 !important; background: white !important; font-size: 9pt !important; }
+                    .billing-print-record-document > header { padding-bottom: 3mm !important; }
+                    .billing-print-record-document > section { margin-top: 4mm !important; }
+                    .billing-print-record-document > section:first-of-type { margin-top: 4mm !important; }
+                    .billing-print-record-document table { page-break-inside: avoid; }
+                    .billing-print-record-document th, .billing-print-record-document td { padding: 1.5mm 2mm !important; }
+                    .billing-print-record-document tr, .billing-print-record-document section, .billing-print-record-document header, .billing-print-record-document footer { page-break-inside: avoid; break-inside: avoid; }
+                    .billing-print-record-document .billing-print-description { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+                    .billing-print-record-document .billing-print-notes p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+                    .billing-print-record-document .billing-print-signature { margin-top: auto !important; padding-top: 6mm !important; }
+                    .billing-print-record-document > footer { margin-top: 4mm !important; padding-top: 2mm !important; }
                     .no-print { display: none !important; }
-                    @page { size: auto; margin: 14mm; }
+                    @page { size: A4 portrait; margin: 8mm; }
                 }
             `}</style>
 
@@ -581,8 +774,8 @@ export default function InstituteBillingWorkspace() {
                                     Find billing records
                                 </h2>
                                 <p className="mt-1 text-xs text-slate-500">
-                                    Filter by invoice number / database ID, billing name, type, or
-                                    billing date.
+                                    Filter by invoice number / database ID,
+                                    billing name, type, or billing date.
                                 </p>
                             </div>
                             <button
@@ -727,6 +920,11 @@ export default function InstituteBillingWorkspace() {
                                 >
                                     Institute billing register
                                 </h2>
+                                <p className="mt-1 text-xs font-medium text-teal-800">
+                                    {isSuperUser
+                                        ? 'Institute-wide access · all branches'
+                                        : `Branch access · ${currentBranch?.name ?? 'assigned branch'}`}
+                                </p>
                                 <p className="mt-1 text-xs text-slate-500">
                                     {totalRecords} matching records · Amounts in
                                     BDT
@@ -739,14 +937,14 @@ export default function InstituteBillingWorkspace() {
                                     <tr>
                                         {[
                                             'Record / billing name',
-                                            'Quantity / Unit',
                                             'Payee / branch',
                                             'Billing date',
-                                            'Due date',
                                             'Amount',
-                                            'Balance',
-                                            'Status',
-                                            '',
+                                            'Due',
+                                            'Payment status',
+                                            'Approval status',
+                                            'Actions',
+                                            'View',
                                         ].map((heading) => (
                                             <th
                                                 key={heading || 'actions'}
@@ -777,16 +975,12 @@ export default function InstituteBillingWorkspace() {
                                             <tr key={record.id}>
                                                 <td className="min-w-56 px-4 py-4 first:pl-5">
                                                     <p className="font-mono text-xs font-semibold text-[#17375C]">
-                                                        {record.invoice_number ?? `#${record.id}`}
+                                                        {record.invoice_number ??
+                                                            `#${record.id}`}
                                                     </p>
                                                     <p className="mt-1 font-medium text-slate-800">
                                                         {record.billing_name}
                                                     </p>
-                                                </td>
-                                                <td className="px-4 py-4 text-xs text-slate-600">
-                                                    {record.items[0]
-                                                        ? quantityWithUnit(record.items[0])
-                                                        : ''}
                                                 </td>
                                                 <td className="min-w-48 px-4 py-4">
                                                     <p className="text-xs font-medium text-slate-700">
@@ -800,9 +994,6 @@ export default function InstituteBillingWorkspace() {
                                                 <td className="px-4 py-4 text-xs whitespace-nowrap text-slate-600">
                                                     {record.billing_date}
                                                 </td>
-                                                <td className="px-4 py-4 text-xs whitespace-nowrap text-slate-600">
-                                                    {record.due_date ?? '—'}
-                                                </td>
                                                 <td className="px-4 py-4 text-xs font-medium whitespace-nowrap">
                                                     {money(record.amount)}
                                                 </td>
@@ -815,6 +1006,41 @@ export default function InstituteBillingWorkspace() {
                                                     >
                                                         {record.payment_status}
                                                     </span>
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    <span
+                                                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${record.approval_status === 'approved' ? 'bg-emerald-50 text-emerald-700' : record.approval_status === 'cancelled' ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-700'}`}
+                                                    >
+                                                        {record.approval_status}
+                                                    </span>
+                                                </td>
+                                                <td className="no-print px-4 py-4">
+                                                    <div className="flex items-center gap-2">
+                                                        {(currentUser.is_super_admin ===
+                                                            true ||
+                                                            record.created_by_id ===
+                                                                currentUser.id) && (
+                                                            <>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        openStatusEditor(
+                                                                            record,
+                                                                        )
+                                                                    }
+                                                                    aria-label={`Update approval status for ${record.invoice_number ?? record.id}`}
+                                                                    title="Update approval status"
+                                                                    className="rounded-lg border border-teal-200 p-2 text-teal-800 hover:bg-teal-50"
+                                                                >
+                                                                    <Pencil
+                                                                        size={
+                                                                            16
+                                                                        }
+                                                                    />
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td className="no-print px-4 py-4 last:pr-5">
                                                     <button
@@ -888,7 +1114,14 @@ export default function InstituteBillingWorkspace() {
                 </div>
             </main>
 
-            <PrintableBill record={selectedRecord} />
+            {typeof document !== 'undefined' &&
+                createPortal(
+                    <PrintableBill
+                        record={selectedRecord}
+                        branding={branding}
+                    />,
+                    document.body,
+                )}
 
             <Dialog
                 open={dialog !== null}
@@ -903,12 +1136,20 @@ export default function InstituteBillingWorkspace() {
                         <DialogTitle>
                             {dialog === 'create'
                                 ? 'Create a billing record'
-                                : 'Billing record details'}
+                                : dialog === 'status'
+                                  ? 'Update bill status'
+                                  : dialog === 'payment'
+                                    ? 'Record cash payment'
+                                    : 'Billing record details'}
                         </DialogTitle>
                         <DialogDescription>
                             {dialog === 'create'
                                 ? 'Enter bill information and choose its status.'
-                                : 'Review the billing details and print a copy.'}
+                                : dialog === 'status'
+                                  ? 'Change the approval status for this bill.'
+                                  : dialog === 'payment'
+                                    ? 'Record a cash payment against this approved bill.'
+                                    : 'Review the billing details and print a copy.'}
                         </DialogDescription>
                     </DialogHeader>
                     {dialog === 'details' && (
@@ -936,6 +1177,25 @@ export default function InstituteBillingWorkspace() {
                             )}
                         </>
                     )}
+                    {dialog === 'status' && selectedRecord && (
+                        <BillStatusEditor
+                            record={selectedRecord}
+                            saving={statusSaving}
+                            error={formError}
+                            onSave={updateBillStatus}
+                            onCancel={() => setDialog(null)}
+                        />
+                    )}
+                    {dialog === 'payment' && selectedRecord && (
+                        <BillCashPaymentEditor
+                            record={selectedRecord}
+                            accounts={selectedRecordCashAccounts}
+                            saving={paymentSaving}
+                            error={formError}
+                            onSave={recordBillCashPayment}
+                            onCancel={() => setDialog(null)}
+                        />
+                    )}
                     {dialog === 'create' && (
                         <form onSubmit={submitBill} className="space-y-4">
                             <div className="grid gap-4 sm:grid-cols-2">
@@ -962,77 +1222,150 @@ export default function InstituteBillingWorkspace() {
                                     <div className="rounded-2xl border border-teal-200 bg-teal-50/70 p-4">
                                         <div className="flex items-start justify-between gap-3">
                                             <div>
-                                                <p className="text-[11px] font-semibold tracking-wide text-teal-700 uppercase">Selected billing item</p>
-                                                <p className="mt-1 font-semibold text-[#17375C]">{selectedItem.name}</p>
-                                                {!selectedItem.is_other && <p className="mt-1 text-xs text-teal-800">Configured price: {selectedPrice ? money(selectedPrice.amount) : 'No active price'}</p>}
+                                                <p className="text-[11px] font-semibold tracking-wide text-teal-700 uppercase">
+                                                    Selected billing item
+                                                </p>
+                                                <p className="mt-1 font-semibold text-[#17375C]">
+                                                    {selectedItem.name}
+                                                </p>
+                                                {!selectedItem.is_other && (
+                                                    <p className="mt-1 text-xs text-teal-800">
+                                                        Configured price:{' '}
+                                                        {selectedPrice
+                                                            ? money(
+                                                                  selectedPrice.amount,
+                                                              )
+                                                            : 'No active price'}
+                                                    </p>
+                                                )}
                                             </div>
-                                            <button type="button" onClick={() => { setSelectedBillingItem(null); setBillingItemSearch(''); setBillingItemListOpen(true); setForm({ ...form, billingItemId: '', priceVersionId: '', branchId: currentBranch?.id ? String(currentBranch.id) : '' }); }} className="shrink-0 rounded-lg border border-teal-200 bg-white px-3 py-1.5 text-xs font-semibold text-teal-800 hover:bg-teal-100">Change item</button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedBillingItem(
+                                                        null,
+                                                    );
+                                                    setBillingItemSearch('');
+                                                    setBillingItemListOpen(
+                                                        true,
+                                                    );
+                                                    setForm({
+                                                        ...form,
+                                                        billingItemId: '',
+                                                        priceVersionId: '',
+                                                        branchId:
+                                                            currentBranch?.id
+                                                                ? String(
+                                                                      currentBranch.id,
+                                                                  )
+                                                                : '',
+                                                    });
+                                                }}
+                                                className="shrink-0 rounded-lg border border-teal-200 bg-white px-3 py-1.5 text-xs font-semibold text-teal-800 hover:bg-teal-100"
+                                            >
+                                                Change item
+                                            </button>
                                         </div>
                                     </div>
                                 )}
-                                {!selectedItem && <label className="text-xs font-medium text-slate-600">
-                                    Billing item
-                                    <input
-                                        required
-                                        value={billingItemSearch}
-                                        onFocus={() => setBillingItemListOpen(true)}
-                                        onChange={(event) => {
-                                            setBillingItemSearch(
-                                                event.target.value,
-                                            );
-                                            setSelectedBillingItem(null);
-                                            setBillingItemListOpen(true);
-                                            setForm({
-                                                ...form,
-                                                billingItemId: '',
-                                                priceVersionId: '',
-                                            branchId: currentBranch?.id ? String(currentBranch.id) : '',
-                                            });
-                                        }}
-                                        className={inputClass}
-                                        placeholder="Search billing items…"
-                                        autoComplete="off"
-                                    />
-                                    {billingItemListOpen && billingItemsLoading ? (
-                                        <p className="mt-2 text-xs text-slate-500">
-                                            Searching billing items…
-                                        </p>
-                                    ) : billingItemListOpen && billingItems.length > 0 ? (
-                                        <div className="mt-2 max-h-44 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-sm">
-                                            {billingItems.map((item) => (
-                                                <button
-                                                    key={item.id}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setSelectedBillingItem(
-                                                            item,
-                                                        );
-                                                        setBillingItemSearch(
-                                                            item.name,
-                                                        );
-                                                        setBillingItemListOpen(false);
-                                                        setForm({
-                                                            ...form,
-                                                            billingItemId:
-                                                                String(item.id),
-                                                            priceVersionId: '',
-                                                            branchId: currentBranch?.id ? String(currentBranch.id) : '',
-                                                        });
-                                                    }}
-                                                    className={`block w-full border-b border-slate-100 px-3 py-2.5 text-left text-sm last:border-b-0 hover:bg-teal-50 ${selectedItem?.id === item.id ? 'bg-teal-50 font-semibold text-teal-900' : 'text-slate-700'}`}
-                                                >
-                                                    {item.name}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    ) : billingItemListOpen ? (
-                                        <p className="mt-2 text-xs text-slate-500">
-                                            No matching billing items.
-                                        </p>
-                                    ) : null}
-                                </label>}
-                                <ReadOnlyContextField label="Payer / supplier" value={currentUser.name} />
-                                <ReadOnlyContextField label="User branch" value={currentBranch?.name ?? 'No branch assigned'} />
+                                {!selectedItem && (
+                                    <label className="text-xs font-medium text-slate-600">
+                                        Billing item
+                                        <input
+                                            required
+                                            value={billingItemSearch}
+                                            onFocus={() =>
+                                                setBillingItemListOpen(true)
+                                            }
+                                            onChange={(event) => {
+                                                setBillingItemSearch(
+                                                    event.target.value,
+                                                );
+                                                setSelectedBillingItem(null);
+                                                setBillingItemListOpen(true);
+                                                setForm({
+                                                    ...form,
+                                                    billingItemId: '',
+                                                    priceVersionId: '',
+                                                    branchId: currentBranch?.id
+                                                        ? String(
+                                                              currentBranch.id,
+                                                          )
+                                                        : '',
+                                                });
+                                            }}
+                                            className={inputClass}
+                                            placeholder="Search billing items…"
+                                            autoComplete="off"
+                                        />
+                                        {billingItemListOpen &&
+                                        billingItemsLoading ? (
+                                            <p className="mt-2 text-xs text-slate-500">
+                                                Searching billing items…
+                                            </p>
+                                        ) : billingItemListOpen &&
+                                          billingItems.length > 0 ? (
+                                            <div className="mt-2 max-h-44 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+                                                {billingItems.map((item) => (
+                                                    <button
+                                                        key={item.id}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setSelectedBillingItem(
+                                                                item,
+                                                            );
+                                                            setBillingItemSearch(
+                                                                item.name,
+                                                            );
+                                                            setBillingItemListOpen(
+                                                                false,
+                                                            );
+                                                            setForm({
+                                                                ...form,
+                                                                billingItemId:
+                                                                    String(
+                                                                        item.id,
+                                                                    ),
+                                                                priceVersionId:
+                                                                    '',
+                                                                branchId:
+                                                                    currentBranch?.id
+                                                                        ? String(
+                                                                              currentBranch.id,
+                                                                          )
+                                                                        : '',
+                                                            });
+                                                        }}
+                                                        className={`block w-full border-b border-slate-100 px-3 py-2.5 text-left text-sm last:border-b-0 hover:bg-teal-50 ${selectedItem?.id === item.id ? 'bg-teal-50 font-semibold text-teal-900' : 'text-slate-700'}`}
+                                                    >
+                                                        {item.name}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        ) : billingItemListOpen ? (
+                                            <p className="mt-2 text-xs text-slate-500">
+                                                No matching billing items.
+                                            </p>
+                                        ) : null}
+                                    </label>
+                                )}
+                                <ReadOnlyContextField
+                                    label="Payer / supplier"
+                                    value={currentUser.name}
+                                />
+                                <ReadOnlyContextField
+                                    label={
+                                        isSuperUser
+                                            ? 'Billing scope'
+                                            : 'User branch'
+                                    }
+                                    value={
+                                        isSuperUser
+                                            ? 'Institute-wide'
+                                            : (currentBranch?.name ??
+                                              'No branch assigned')
+                                    }
+                                />
                                 <label className="text-xs font-medium text-slate-600">
                                     Billing date
                                     <input
@@ -1049,7 +1382,10 @@ export default function InstituteBillingWorkspace() {
                                     />
                                 </label>
                                 <label className="text-xs font-medium text-slate-600">
-                                    Quantity {selectedPrice?.unit_name ? `(${selectedPrice.unit_name})` : ''}
+                                    Quantity{' '}
+                                    {selectedPrice?.unit_name
+                                        ? `(${selectedPrice.unit_name})`
+                                        : ''}
                                     <input
                                         required
                                         type="number"
@@ -1058,7 +1394,12 @@ export default function InstituteBillingWorkspace() {
                                         step="1"
                                         inputMode="numeric"
                                         value={form.quantity}
-                                        onChange={(event) => setForm({ ...form, quantity: event.target.value })}
+                                        onChange={(event) =>
+                                            setForm({
+                                                ...form,
+                                                quantity: event.target.value,
+                                            })
+                                        }
                                         className={inputClass}
                                     />
                                 </label>
@@ -1084,12 +1425,32 @@ export default function InstituteBillingWorkspace() {
                                     Bill status
                                     <select
                                         value={form.status}
-                                        onChange={(event) => setForm({ ...form, status: event.target.value as BillForm['status'] })}
+                                        onChange={(event) => {
+                                            const status = event.target
+                                                .value as BillForm['status'];
+                                            setForm({
+                                                ...form,
+                                                status,
+                                                ...(status !== 'approved'
+                                                    ? {
+                                                          cashPayment: false,
+                                                          cashPaymentAmount: '',
+                                                          cashAccountId: '',
+                                                      }
+                                                    : {}),
+                                            });
+                                        }}
                                         className={inputClass}
                                     >
-                                        <option value="draft">Draft</option>
-                                        <option value="approved">Approved</option>
-                                        <option value="cancelled">Cancelled</option>
+                                        <option value="pending">
+                                            Pending approval
+                                        </option>
+                                        <option value="approved">
+                                            Approved
+                                        </option>
+                                        <option value="cancelled">
+                                            Cancelled
+                                        </option>
                                     </select>
                                 </label>
                                 {selectedItem?.is_other ? (
@@ -1129,6 +1490,146 @@ export default function InstituteBillingWorkspace() {
                                         placeholder="What is this bill for?"
                                     />
                                 </label>
+                                <section className="space-y-3 rounded-xl border border-slate-200 p-4 sm:col-span-2">
+                                    <label className="flex items-start gap-3 text-sm font-medium text-slate-700">
+                                        <input
+                                            type="checkbox"
+                                            checked={form.cashPayment}
+                                            onChange={(event) =>
+                                                setForm({
+                                                    ...form,
+                                                    cashPayment:
+                                                        event.target.checked,
+                                                    cashAccountId: event.target
+                                                        .checked
+                                                        ? form.cashAccountId ||
+                                                          String(
+                                                              cashAccountOptions[0]
+                                                                  ?.id ?? '',
+                                                          )
+                                                        : '',
+                                                })
+                                            }
+                                            disabled={
+                                                form.status !== 'approved'
+                                            }
+                                            className="mt-0.5 size-4 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
+                                        />
+                                        <span>
+                                            Record cash payment with this bill
+                                            <span className="mt-1 block text-xs font-normal text-slate-500">
+                                                Cash is recorded as received and
+                                                confirmed. Partial payments are
+                                                allowed.
+                                            </span>
+                                            {form.status !== 'approved' && (
+                                                <span className="mt-1 block text-xs font-normal text-amber-700">
+                                                    Approve the bill before
+                                                    recording a payment.
+                                                </span>
+                                            )}
+                                        </span>
+                                    </label>
+                                    {form.cashPayment && (
+                                        <div className="grid gap-4">
+                                            <label className="text-xs font-medium text-slate-600">
+                                                Cash amount (BDT)
+                                                <span className="mt-1 block text-xs font-normal text-slate-500">
+                                                    Bill total:{' '}
+                                                    {money(billTotalAmount)}
+                                                </span>
+                                                <input
+                                                    required
+                                                    type="number"
+                                                    min="0.01"
+                                                    max={
+                                                        billTotalAmount > 0
+                                                            ? billTotalAmount.toFixed(
+                                                                  2,
+                                                              )
+                                                            : undefined
+                                                    }
+                                                    step="0.01"
+                                                    inputMode="decimal"
+                                                    value={
+                                                        form.cashPaymentAmount
+                                                    }
+                                                    onChange={(event) =>
+                                                        setForm({
+                                                            ...form,
+                                                            cashPaymentAmount:
+                                                                event.target
+                                                                    .value,
+                                                        })
+                                                    }
+                                                    className={inputClass}
+                                                    placeholder="0.00"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setForm({
+                                                            ...form,
+                                                            cashPaymentAmount:
+                                                                billTotalAmount.toFixed(
+                                                                    2,
+                                                                ),
+                                                        })
+                                                    }
+                                                    disabled={
+                                                        billTotalAmount <= 0
+                                                    }
+                                                    className="mt-1 text-xs font-semibold text-teal-800 hover:underline disabled:cursor-not-allowed disabled:text-slate-400"
+                                                >
+                                                    Use full bill amount
+                                                </button>
+                                            </label>
+                                            <label className="text-xs font-medium text-slate-600">
+                                                Cash account
+                                                <select
+                                                    required
+                                                    value={form.cashAccountId}
+                                                    onChange={(event) =>
+                                                        setForm({
+                                                            ...form,
+                                                            cashAccountId:
+                                                                event.target
+                                                                    .value,
+                                                        })
+                                                    }
+                                                    className={inputClass}
+                                                >
+                                                    <option value="">
+                                                        Select cash account
+                                                    </option>
+                                                    {cashAccountOptions.map(
+                                                        (account) => (
+                                                            <option
+                                                                key={account.id}
+                                                                value={
+                                                                    account.id
+                                                                }
+                                                            >
+                                                                {account.name}
+                                                                {account.branch_id
+                                                                    ? ` · ${account.code}`
+                                                                    : ' · Institute-wide'}
+                                                            </option>
+                                                        ),
+                                                    )}
+                                                </select>
+                                                {cashAccountOptions.length ===
+                                                    0 && (
+                                                    <span className="mt-1 block text-xs font-normal text-rose-700">
+                                                        No active cash account
+                                                        is configured for this
+                                                        institute and branch.
+                                                    </span>
+                                                )}
+                                            </label>
+                                        </div>
+                                    )}
+                                </section>
                                 <label className="text-xs font-medium text-slate-600 sm:col-span-2">
                                     Notes{' '}
                                     <span className="font-normal text-slate-400">
@@ -1168,7 +1669,10 @@ export default function InstituteBillingWorkspace() {
                                     disabled={
                                         saving ||
                                         optionsLoading ||
-                                        !selectedItem
+                                        !selectedItem ||
+                                        (form.cashPayment &&
+                                            (!form.cashPaymentAmount ||
+                                                !form.cashAccountId))
                                     }
                                     className={primaryButton}
                                 >
@@ -1188,6 +1692,238 @@ export default function InstituteBillingWorkspace() {
                 </DialogContent>
             </Dialog>
         </AppLayout>
+    );
+}
+
+/** Edit a bill's approval state in a dedicated dialog separate from bill details. */
+function BillStatusEditor({
+    record,
+    saving,
+    error,
+    onSave,
+    onCancel,
+}: {
+    record: BillingRecord;
+    saving: boolean;
+    error: string;
+    onSave: (
+        status: ApprovalStatus,
+        cancellationReason: string,
+    ) => Promise<void>;
+    onCancel: () => void;
+}) {
+    const [nextStatus, setNextStatus] = useState<ApprovalStatus>(
+        record.approval_status as ApprovalStatus,
+    );
+    const [cancellationReason, setCancellationReason] = useState('');
+
+    return (
+        <div className="space-y-4">
+            <div className="rounded-xl bg-slate-50 p-4">
+                <p className="font-mono text-xs font-semibold text-teal-700">
+                    {record.invoice_number ?? `#${record.id}`}
+                </p>
+                <p className="mt-1 font-semibold text-[#17375C]">
+                    {record.billing_name}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                    Current approval status: {record.approval_status}
+                </p>
+            </div>
+            <label className="block text-xs font-medium text-slate-600">
+                New approval status
+                <select
+                    value={nextStatus}
+                    onChange={(event) =>
+                        setNextStatus(event.target.value as ApprovalStatus)
+                    }
+                    className={inputClass}
+                    disabled={saving}
+                >
+                    {record.approval_status === 'draft' && (
+                        <option value="draft">Draft (legacy)</option>
+                    )}
+                    <option value="pending">Pending approval</option>
+                    <option value="approved">Approved</option>
+                    <option value="cancelled">Cancelled</option>
+                </select>
+            </label>
+            {nextStatus === 'cancelled' && (
+                <label className="block text-xs font-medium text-slate-600">
+                    Cancellation reason (optional)
+                    <textarea
+                        value={cancellationReason}
+                        onChange={(event) =>
+                            setCancellationReason(event.target.value)
+                        }
+                        rows={3}
+                        className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/10"
+                        disabled={saving}
+                    />
+                </label>
+            )}
+            {error && (
+                <p role="alert" className="text-sm text-rose-700">
+                    {error}
+                </p>
+            )}
+            <footer className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                <button
+                    type="button"
+                    onClick={onCancel}
+                    disabled={saving}
+                    className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-600 disabled:opacity-60"
+                >
+                    Cancel
+                </button>
+                <button
+                    type="button"
+                    onClick={() => void onSave(nextStatus, cancellationReason)}
+                    disabled={saving || nextStatus === record.approval_status}
+                    className={primaryButton}
+                >
+                    {saving ? (
+                        <LoaderCircle size={16} className="animate-spin" />
+                    ) : (
+                        <Save size={16} />
+                    )}
+                    {saving ? 'Updating…' : 'Save status'}
+                </button>
+            </footer>
+        </div>
+    );
+}
+
+/** Record an additional cash payment after the bill has been approved. */
+function BillCashPaymentEditor({
+    record,
+    accounts,
+    saving,
+    error,
+    onSave,
+    onCancel,
+}: {
+    record: BillingRecord;
+    accounts: CashAccountOption[];
+    saving: boolean;
+    error: string;
+    onSave: (amount: string, accountId: string) => Promise<void>;
+    onCancel: () => void;
+}) {
+    const [amount, setAmount] = useState(record.balance);
+    const [accountId, setAccountId] = useState(String(accounts[0]?.id ?? ''));
+
+    useEffect(() => {
+        if (!accounts.some((account) => String(account.id) === accountId)) {
+            setAccountId(String(accounts[0]?.id ?? ''));
+        }
+    }, [accountId, accounts]);
+
+    return (
+        <div className="space-y-4">
+            <div className="rounded-xl bg-slate-50 p-4">
+                <p className="font-mono text-xs font-semibold text-teal-700">
+                    {record.invoice_number ?? `#${record.id}`}
+                </p>
+                <p className="mt-1 font-semibold text-[#17375C]">
+                    {record.billing_name}
+                </p>
+                <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                        <dt className="text-slate-500">Bill total</dt>
+                        <dd className="mt-1 font-semibold">
+                            {money(record.amount)}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt className="text-slate-500">Remaining balance</dt>
+                        <dd className="mt-1 font-semibold text-amber-700">
+                            {money(record.balance)}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+            <label className="block text-xs font-medium text-slate-600">
+                Cash account
+                <select
+                    required
+                    value={accountId}
+                    onChange={(event) => setAccountId(event.target.value)}
+                    className={inputClass}
+                    disabled={saving || accounts.length === 0}
+                >
+                    <option value="">Select cash account</option>
+                    {accounts.map((account) => (
+                        <option key={account.id} value={account.id}>
+                            {account.name}
+                        </option>
+                    ))}
+                </select>
+                {accounts.length === 0 && (
+                    <span className="mt-1 block font-normal text-rose-700">
+                        No active cash account is configured for this institute
+                        and branch.
+                    </span>
+                )}
+            </label>
+            <label className="block text-xs font-medium text-slate-600">
+                Cash payment amount (BDT)
+                <input
+                    required
+                    type="number"
+                    min="0.01"
+                    max={record.balance}
+                    step="0.01"
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={(event) => setAmount(event.target.value)}
+                    className={inputClass}
+                    disabled={saving}
+                />
+                <button
+                    type="button"
+                    onClick={() => setAmount(record.balance)}
+                    className="mt-1 text-xs font-semibold text-teal-800 hover:underline"
+                    disabled={saving}
+                >
+                    Pay remaining balance
+                </button>
+            </label>
+            <p className="text-xs text-slate-500">
+                Cash payments are recorded as received and confirmed
+                immediately.
+            </p>
+            {error && (
+                <p role="alert" className="text-sm text-rose-700">
+                    {error}
+                </p>
+            )}
+            <footer className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                <button
+                    type="button"
+                    onClick={onCancel}
+                    disabled={saving}
+                    className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-600 disabled:opacity-60"
+                >
+                    Cancel
+                </button>
+                <button
+                    type="button"
+                    onClick={() => void onSave(amount, accountId)}
+                    disabled={
+                        saving || accounts.length === 0 || !amount || !accountId
+                    }
+                    className={primaryButton}
+                >
+                    {saving ? (
+                        <LoaderCircle size={16} className="animate-spin" />
+                    ) : (
+                        <Banknote size={16} />
+                    )}
+                    {saving ? 'Recording…' : 'Record payment'}
+                </button>
+            </footer>
+        </div>
     );
 }
 
@@ -1231,14 +1967,16 @@ function BillDetails({
                     ['Due date', record.due_date ?? ''],
                     ['Invoice number', record.invoice_number ?? ''],
                     ['Approval status', record.approval_status],
-                ].filter(([, value]) => value !== '').map(([label, value]) => (
-                    <div key={label}>
-                        <dt className="text-xs text-slate-500">{label}</dt>
-                        <dd className="mt-1 text-sm font-medium text-slate-800">
-                            {value}
-                        </dd>
-                    </div>
-                ))}
+                ]
+                    .filter(([, value]) => value !== '')
+                    .map(([label, value]) => (
+                        <div key={label}>
+                            <dt className="text-xs text-slate-500">{label}</dt>
+                            <dd className="mt-1 text-sm font-medium text-slate-800">
+                                {value}
+                            </dd>
+                        </div>
+                    ))}
             </dl>
             <div>
                 <h3 className="mb-2 text-sm font-semibold text-[#17375C]">
@@ -1266,8 +2004,14 @@ function BillDetails({
                             {record.items.map((line, index) => (
                                 <tr key={`${line.description}-${index}`}>
                                     <td className="px-4 py-3">
-                                        <span className="font-medium">{line.item_name}</span>
-                                        {line.description && <span className="mt-1 block text-xs text-slate-500">{line.description}</span>}
+                                        <span className="font-medium">
+                                            {line.item_name}
+                                        </span>
+                                        {line.description && (
+                                            <span className="mt-1 block text-xs text-slate-500">
+                                                {line.description}
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-4 py-3 text-right">
                                         {quantityWithUnit(line)}
@@ -1324,7 +2068,9 @@ function BillDetails({
                             >
                                 <span>
                                     {payment.payment_number} ·{' '}
-                                    {payment.payment_method ?? payment.status}
+                                    {payment.payment_method
+                                        ? `${payment.payment_method}${payment.financial_account ? ` · ${payment.financial_account}` : ''}`
+                                        : payment.status}
                                 </span>
                                 <span className="font-medium">
                                     {money(payment.amount)}
@@ -1365,19 +2111,39 @@ function BillDetails({
 }
 
 /** Render a dedicated print document instead of printing the dialog layout. */
-function PrintableBill({ record }: { record: BillingRecord | null }) {
+function PrintableBill({
+    record,
+    branding,
+}: {
+    record: BillingRecord | null;
+    branding?: {
+        phone: string | null;
+        email: string | null;
+        logo_url: string;
+        name: string;
+    };
+}) {
     if (!record) return null;
 
     return (
         <article className="billing-print-record-document hidden px-10 py-8 text-slate-900">
             <header className="flex items-start justify-between gap-8 border-b-2 border-[#17375C] pb-5">
                 <div>
-                    <p className="text-xl font-bold tracking-wide text-[#17375C]">
-                        CMUD Institute
-                    </p>
+                    <img
+                        src={branding?.logo_url ?? '/apple-touch-icon.png'}
+                        alt={`${branding?.name ?? 'CMUD'} logo`}
+                        className="mb-1 h-12 max-w-48 object-contain object-left"
+                    />
                     <p className="mt-1 text-xs text-slate-500">
-                        Institute Billing Office
+                        CMUD {record.branch?.name ?? 'Institute-wide'} Office
                     </p>
+                    {(branding?.phone || branding?.email) && (
+                        <p className="mt-1 text-[10px] text-slate-500">
+                            {[branding.phone, branding.email]
+                                .filter(Boolean)
+                                .join(' · ')}
+                        </p>
+                    )}
                 </div>
                 <div className="text-right">
                     <h1 className="text-2xl font-bold tracking-wide text-[#17375C]">
@@ -1479,8 +2245,14 @@ function PrintableBill({ record }: { record: BillingRecord | null }) {
                                     {index + 1}
                                 </td>
                                 <td className="px-3 py-3">
-                                    <span className="font-medium">{line.item_name}</span>
-                                    {line.description && <span className="mt-1 block text-[10px] text-slate-500">{line.description}</span>}
+                                    <span className="font-medium">
+                                        {line.item_name}
+                                    </span>
+                                    {line.description && (
+                                        <span className="billing-print-description mt-1 block text-[10px] text-slate-500">
+                                            {line.description}
+                                        </span>
+                                    )}
                                 </td>
                                 <td className="px-3 py-3 text-right tabular-nums">
                                     {quantityWithUnit(line)}
@@ -1519,7 +2291,7 @@ function PrintableBill({ record }: { record: BillingRecord | null }) {
                 </dl>
             </section>
             {record.notes && (
-                <section className="mt-7 rounded-lg border border-slate-200 p-4">
+                <section className="billing-print-notes mt-7 rounded-lg border border-slate-200 p-4">
                     <h2 className="text-[10px] font-bold tracking-[0.14em] text-slate-500 uppercase">
                         Notes
                     </h2>
@@ -1528,14 +2300,20 @@ function PrintableBill({ record }: { record: BillingRecord | null }) {
                     </p>
                 </section>
             )}
-            <section className="mt-16 flex justify-end text-xs">
+            <section className="billing-print-signature mt-16 flex justify-end text-xs">
                 <div className="w-64 text-center">
-                    <p className="text-sm font-semibold">{record.created_by_name ?? '—'}</p>
+                    <p className="text-sm font-semibold">
+                        {record.created_by_name ?? '—'}
+                    </p>
                     {record.created_by_designation && (
-                        <p className="mt-1 mb-8 text-xs text-slate-600">{record.created_by_designation}</p>
+                        <p className="mt-1 mb-8 text-xs text-slate-600">
+                            {record.created_by_designation}
+                        </p>
                     )}
                     {!record.created_by_designation && <div className="mb-8" />}
-                    <div className="border-t border-slate-400 pt-2">Issued by / Signature</div>
+                    <div className="border-t border-slate-400 pt-2">
+                        Issued by / Signature
+                    </div>
                 </div>
             </section>
             <footer className="mt-8 border-t border-slate-200 pt-3 text-center text-[10px] text-slate-500">
@@ -1557,11 +2335,19 @@ function PrintField({ label, value }: { label: string; value: string }) {
 }
 
 /** Show identity and branch context supplied by the authenticated session. */
-function ReadOnlyContextField({ label, value }: { label: string; value: string }) {
+function ReadOnlyContextField({
+    label,
+    value,
+}: {
+    label: string;
+    value: string;
+}) {
     return (
         <div className="text-xs font-medium text-slate-600">
             {label}
-            <p className={`${inputClass} flex items-center bg-slate-50 text-slate-700`}>
+            <p
+                className={`${inputClass} flex items-center bg-slate-50 text-slate-700`}
+            >
                 {value}
             </p>
         </div>
