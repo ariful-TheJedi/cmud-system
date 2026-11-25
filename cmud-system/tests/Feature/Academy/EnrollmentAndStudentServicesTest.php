@@ -9,12 +9,12 @@ use App\Models\Academy\CourseStage;
 use App\Models\Academy\ExamRecord;
 use App\Models\Academy\Student;
 use App\Models\Academy\StudentGroupMembership;
-use App\Models\Finance\StudentTuition;
 use App\Models\Institute\Branch;
 use App\Models\Institute\Institute;
 use App\Modules\Academy\Services\Enrollments\StudentEnrollmentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Tests\Support\EnrollmentTuition;
 use Tests\TestCase;
 
 uses(TestCase::class, RefreshDatabase::class);
@@ -284,7 +284,7 @@ it('synchronizes payment and completion alerts from their source records', funct
         'batch_id' => $fixture['batch']->id,
         'enrollment_date' => '2026-11-20',
     ]);
-    StudentTuition::query()->create([
+    EnrollmentTuition::set([
         'enrollment_id' => $enrollment->id,
         'tuition_number' => 'WF-TUITION-'.$fixture['suffix'],
         'original_amount' => '5000.00',

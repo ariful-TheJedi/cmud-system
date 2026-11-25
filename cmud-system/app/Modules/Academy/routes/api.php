@@ -12,7 +12,7 @@ use App\Modules\Academy\Controllers\Enrollments\StudentEnrollmentController;
 use App\Modules\Academy\Controllers\Students\StudentController;
 use App\Modules\Academy\Controllers\Students\StudentUpdateController;
 use App\Modules\Academy\Controllers\Teachers\TeacherManagementController;
-use App\Modules\Finance\Controllers\StudentEnrollmentBillingController;
+use App\Modules\Finance\Controllers\StudentFinanceController;
 use App\Modules\Finance\Controllers\StudentFinancialOverviewController;
 use App\Modules\Finance\Controllers\StudentPaymentHistoryController;
 use Illuminate\Support\Facades\Route;
@@ -60,7 +60,7 @@ Route::prefix('academy-catalog')->name('academy.catalog.')->controller(AcademyCa
 
 // Student lookup and the separate academic, financial, certificate, and payment views.
 // Keep the static path above students/{studentCode} so it is not captured as a student code.
-Route::get('students/search', [StudentEnrollmentBillingController::class, 'search'])
+Route::get('students/search', [StudentFinanceController::class, 'search'])
     ->middleware(['web', 'auth'])->name('students.finance.search');
 Route::get('students', [StudentController::class, 'index'])->name('students.index');
 Route::get('students/{studentCode}', [StudentController::class, 'show'])->name('students.show');

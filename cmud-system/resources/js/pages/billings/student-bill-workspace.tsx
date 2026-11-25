@@ -95,10 +95,11 @@ type Tuition = {
     outstanding_balance: string;
     payments: Payment[];
 };
-type CashAccount = {
+type FinancialAccount = {
     id: number;
     name: string;
     code: string;
+    account_type: string;
     branch_id: number | null;
 };
 type ExpenseOption = {
@@ -114,8 +115,13 @@ type ExpenseOption = {
     }[];
 };
 type PaymentOptions = {
-    cash_accounts: CashAccount[];
-    payment_methods: { id: number; name: string }[];
+    financial_accounts: FinancialAccount[];
+    payment_methods: {
+        id: number;
+        name: string;
+        requires_transaction_reference: boolean;
+        requires_sender_phone: boolean;
+    }[];
 };
 type Envelope<T> = { data: T; message?: string };
 type Charge = {
@@ -170,25 +176,19 @@ type RegisterPaymentRecordApi = {
     payment_method: string | null;
     transaction_reference: string | null;
     recorded_by_name: string | null;
+    category: string;
+    description: string;
+    expense_id: number | null;
     student: Student;
     enrollment: RegisterCharge["enrollment"];
-    charge: {
-        id: number;
-        kind: "tuition" | "expense";
-        number: string;
-        category: string;
-        description: string;
-        issued_on: string;
-        amount: string;
-        paid: string;
-        due: string;
-    };
 };
 type RegisterPaymentRecord = Payment & {
     payment_key: string;
+    category: string;
+    description: string;
+    expense_id: number | null;
     student: Student;
     enrollment: RegisterCharge["enrollment"];
-    charge: Charge & { enrollmentId: number };
 };
 type RegisterFilters = {
     search: string;
@@ -301,15 +301,15 @@ export default function StudentBillWorkspace() {
     const [tuition, setTuition] = useState<Tuition | null>(null);
     const [expenses, setExpenses] = useState<Expense[]>([]);
     const [paymentOptions, setPaymentOptions] = useState<PaymentOptions>({
-        cash_accounts: [],
+        financial_accounts: [],
         payment_methods: [],
     });
     const [expenseOptions, setExpenseOptions] = useState<ExpenseOption[]>([]);
     const [loadingEnrollment, setLoadingEnrollment] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [dialog, setDialog] = useState<"payment" | "expense" | "view" | null>(
-        null,
-    );
+    const [dialog, setDialog] = useState<
+        "payment-type" | "payment" | "expense" | "view" | null
+    >(null);
     const [selectedChargeNumber, setSelectedChargeNumber] = useState("");
     const [selectedCharge, setSelectedCharge] = useState<Charge | null>(null);
     const [selectedPayment, setSelectedPayment] =
@@ -320,7 +320,9 @@ export default function StudentBillWorkspace() {
         amount: "",
         paid_on: localDate(),
         account_id: "",
+        method_id: "",
         reference: "",
+        payer_phone: "",
         notes: "",
     });
     const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState("");
@@ -333,6 +335,12 @@ export default function StudentBillWorkspace() {
         issued_on: localDate(),
         due_on: "",
         notes: "",
+        collect_payment: false,
+        payment_amount: "",
+        payment_account_id: "",
+        payment_method_id: "",
+        payment_reference: "",
+        payer_phone: "",
     });
     const expenseOptionsController = useRef<AbortController | null>(null);
 
@@ -381,6 +389,12 @@ export default function StudentBillWorkspace() {
     const currentPrice = currentExpenseOption?.prices.find(
         (price) => String(price.id) === expenseForm.price_id,
     );
+    const selectedPaymentMethod = paymentOptions.payment_methods.find(
+        (method) => String(method.id) === paymentForm.method_id,
+    );
+    const selectedExpensePaymentMethod = paymentOptions.payment_methods.find(
+        (method) => String(method.id) === expenseForm.payment_method_id,
+    );
     const issuerName = auth.user.full_name || auth.user.name;
     const branchOffice = `CMUD ${selectedEnrollment?.branch?.name ?? auth.user.branch?.name ?? "Institute-wide"} Branch Office`;
     const instituteContact = [branding?.phone, branding?.email]
@@ -392,7 +406,7 @@ export default function StudentBillWorkspace() {
         async (id: number, signal: AbortSignal) => {
             setLoadingEnrollment(true);
             setError("");
-            setPaymentOptions({ cash_accounts: [], payment_methods: [] });
+            setPaymentOptions({ financial_accounts: [], payment_methods: [] });
             try {
                 const base = `/enrollments/${id}`;
                 const [expenseResponse, optionsResponse, tuitionResponse] =
@@ -427,7 +441,7 @@ export default function StudentBillWorkspace() {
                 );
                 setExpenses([]);
                 setTuition(null);
-                setPaymentOptions({ cash_accounts: [], payment_methods: [] });
+                setPaymentOptions({ financial_accounts: [], payment_methods: [] });
             } finally {
                 if (!signal.aborted) setLoadingEnrollment(false);
             }
@@ -464,22 +478,11 @@ export default function StudentBillWorkspace() {
                         transaction_reference: row.transaction_reference,
                         recorded_by_name: row.recorded_by_name,
                         source: row.source,
+                        category: row.category,
+                        description: row.description,
+                        expense_id: row.expense_id,
                         student: row.student,
                         enrollment: row.enrollment,
-                        charge: {
-                            id: row.charge.id,
-                            kind: row.charge.kind,
-                            enrollmentId: row.enrollment.id,
-                            number: row.charge.number,
-                            category: row.charge.category,
-                            description: row.charge.description,
-                            issuedOn: row.charge.issued_on,
-                            amount: row.charge.amount,
-                            paid: row.charge.paid,
-                            due: row.charge.due,
-                            payments: [],
-                            cancelled: false,
-                        },
                     })),
                 );
                 setRegisterMeta(response.data.meta);
@@ -608,7 +611,7 @@ export default function StudentBillWorkspace() {
             setLoadingEnrollment(false);
             setExpenses([]);
             setTuition(null);
-            setPaymentOptions({ cash_accounts: [], payment_methods: [] });
+            setPaymentOptions({ financial_accounts: [], payment_methods: [] });
             return;
         }
         const controller = new AbortController();
@@ -665,15 +668,15 @@ export default function StudentBillWorkspace() {
         }
     }
 
-    /** Select a charge's scoped enrollment before opening its details dialog. */
+    /** Select a payment's scoped enrollment before opening its details dialog. */
     async function openRegisterCharge(row: RegisterPaymentRecord) {
         if (!(await selectRegisterEnrollment(row))) return;
-        setSelectedCharge(row.charge);
+        setSelectedCharge(null);
         setSelectedPayment(row);
         setDialog("view");
     }
 
-    /** Load branch-compatible cash accounts before opening payment from the register. */
+    /** Load branch-compatible accounts before opening payment from the register. */
     async function openRegisterPayment(row: RegisterCharge) {
         setOpeningRegisterPayment(true);
         setError("");
@@ -690,7 +693,9 @@ export default function StudentBillWorkspace() {
                 amount: "",
                 paid_on: localDate(),
                 account_id: "",
+                method_id: "",
                 reference: "",
+                payer_phone: "",
                 notes: "",
             });
             setPaymentIdempotencyKey(makeIdempotencyKey());
@@ -699,7 +704,7 @@ export default function StudentBillWorkspace() {
             setError(
                 getRequestErrorMessage(
                     reason,
-                    "Unable to load cash accounts for this enrollment.",
+                    "Unable to load payment accounts for this enrollment.",
                 ),
             );
         } finally {
@@ -722,7 +727,14 @@ export default function StudentBillWorkspace() {
             issued_on: localDate(),
             due_on: "",
             notes: "",
+            collect_payment: false,
+            payment_amount: "",
+            payment_account_id: "",
+            payment_method_id: "",
+            payment_reference: "",
+            payer_phone: "",
         });
+        setPaymentIdempotencyKey(makeIdempotencyKey());
         setExpenseOptions([]);
         setError("");
         try {
@@ -794,7 +806,9 @@ export default function StudentBillWorkspace() {
             amount: "",
             paid_on: localDate(),
             account_id: "",
+            method_id: "",
             reference: "",
+            payer_phone: "",
             notes: "",
         });
         setError("");
@@ -818,14 +832,16 @@ export default function StudentBillWorkspace() {
             const payload = {
                 amount: paymentForm.amount,
                 financial_account_id: Number(paymentForm.account_id),
+                payment_method_id: Number(paymentForm.method_id),
                 idempotency_key: paymentIdempotencyKey,
                 paid_at: paymentForm.paid_on,
                 transaction_reference: paymentForm.reference || null,
+                payer_phone: paymentForm.payer_phone || null,
                 notes: paymentForm.notes || null,
             };
             const path =
                 charge.kind === "tuition"
-                    ? `/enrollments/${targetEnrollmentId}/tuition/${charge.id}/payments`
+                    ? `/enrollments/${targetEnrollmentId}/tuition/payments`
                     : `/enrollments/${targetEnrollmentId}/expenses/${charge.id}/payments`;
             const response = await request<
                 Envelope<{ idempotent_replay?: boolean }>
@@ -834,7 +850,7 @@ export default function StudentBillWorkspace() {
             setNotice(
                 response.status === 200 || response.data.data.idempotent_replay
                     ? "This payment was already recorded. The existing payment record is available in the register."
-                    : "Cash payment recorded successfully.",
+                    : "Payment recorded successfully.",
             );
             setRegisterRefreshKey((current) => current + 1);
             const controller = new AbortController();
@@ -857,26 +873,53 @@ export default function StudentBillWorkspace() {
         setSaving(true);
         setError("");
         try {
-            await request<Envelope<Expense>>(
+            const data = {
+                student_expense_type_id: Number(expenseForm.type_id),
+                price_version_id: Number(expenseForm.price_id),
+                student_stage_record_id: expenseForm.stage_record_id
+                    ? Number(expenseForm.stage_record_id)
+                    : null,
+                quantity: expenseForm.quantity,
+                description: expenseForm.description || undefined,
+                issued_on: expenseForm.issued_on,
+                due_on: expenseForm.due_on || null,
+                notes: expenseForm.notes || null,
+                ...(expenseForm.collect_payment
+                    ? {
+                          payment: {
+                              amount: expenseForm.payment_amount,
+                              financial_account_id: Number(
+                                  expenseForm.payment_account_id,
+                              ),
+                              payment_method_id: Number(
+                                  expenseForm.payment_method_id,
+                              ),
+                              idempotency_key: paymentIdempotencyKey,
+                              paid_at: localDate(),
+                              transaction_reference:
+                                  expenseForm.payment_reference || null,
+                              payer_phone: expenseForm.payer_phone || null,
+                              notes: expenseForm.notes || null,
+                          },
+                      }
+                    : {}),
+            };
+            const response = await request<
+                Envelope<Expense & { payment?: Payment }>
+            >(
                 `/enrollments/${enrollmentId}/expenses`,
                 {
                     method: "POST",
-                    data: {
-                        student_expense_type_id: Number(expenseForm.type_id),
-                        price_version_id: Number(expenseForm.price_id),
-                        student_stage_record_id: expenseForm.stage_record_id
-                            ? Number(expenseForm.stage_record_id)
-                            : null,
-                        quantity: expenseForm.quantity,
-                        description: expenseForm.description || undefined,
-                        issued_on: expenseForm.issued_on,
-                        due_on: expenseForm.due_on || null,
-                        notes: expenseForm.notes || null,
-                    },
+                    data,
                 },
             );
             setDialog(null);
-            setNotice("Student expense issued successfully.");
+            setNotice(
+                response.data.data.payment
+                    ? "Student bill and payment recorded successfully."
+                    : "Student expense issued successfully.",
+            );
+            setRegisterRefreshKey((current) => current + 1);
             await refreshSelectedEnrollment();
         } catch (reason) {
             setError(
@@ -891,15 +934,12 @@ export default function StudentBillWorkspace() {
     }
 
     function printReceipt(
-        charge: Charge,
-        payment: Payment,
+        payment: RegisterPaymentRecord,
         registerContext?: {
             student: Student;
             courseName: string | null;
             batchName: string | null;
             branchName: string | null;
-            paidToDate: string;
-            due: string;
         },
     ) {
         // The receipt uses the recorded issuer and server-issued receipt number from the API.
@@ -915,7 +955,6 @@ export default function StudentBillWorkspace() {
             ["Payment date", dateTimeLabel(payment.paid_at)],
             ["Payment method", payment.payment_method ?? "Cash"],
             ["Issued by", payment.recorded_by_name ?? issuerName],
-            ["Charge reference", charge.number],
             ...(payment.transaction_reference
                 ? [["Transaction reference", payment.transaction_reference]]
                 : []),
@@ -925,18 +964,6 @@ export default function StudentBillWorkspace() {
                     `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`,
             )
             .join("");
-        const collected = registerContext
-            ? Number(registerContext.paidToDate)
-            : charge.payments
-                  .filter(
-                      (item) =>
-                          item.status === "confirmed" &&
-                          new Date(item.paid_at) <= new Date(payment.paid_at),
-                  )
-                  .reduce((total, item) => total + Number(item.amount), 0);
-        const receiptDue = registerContext
-            ? Number(registerContext.due)
-            : Math.max(0, Number(charge.amount) - collected);
         const logoUrl = escapeHtml(
             branding?.logo_url ||
                 `${window.location.origin}/apple-touch-icon.png`,
@@ -954,8 +981,8 @@ export default function StudentBillWorkspace() {
         printWindow.document.open();
         printWindow.document
             .write(`<!doctype html><html><head><meta charset="utf-8"><title>Payment receipt ${escapeHtml(payment.payment_number)}</title><style>
-            *{box-sizing:border-box}body{margin:0;color:#111827;font:12px Arial,sans-serif}.receipt{width:100%;padding:32px 40px}.header{display:flex;justify-content:space-between;gap:24px;border-bottom:2px solid #17375c;padding-bottom:18px}.brand img{display:block;width:auto;height:48px;max-width:190px;object-fit:contain;object-position:left}.brand p{margin:5px 0 0;color:#64748b;font-size:11px}.header-title{text-align:right}.header-title h1{margin:0;color:#17375c;font-size:22px}.header-title p{margin:5px 0 0;color:#64748b;font-size:10px;font-weight:bold;letter-spacing:.16em;text-transform:uppercase}.content{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:24px}.label{margin:0 0 8px;color:#64748b;font-size:10px;font-weight:bold;letter-spacing:.14em;text-transform:uppercase}.student-name{margin:0;font-size:15px;font-weight:bold}.student-extra{margin:5px 0 0;color:#475569;font-size:11px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin:0;padding:13px;border:1px solid #e2e8f0;border-radius:6px}.meta dt{color:#64748b;font-size:9px}.meta dd{margin:3px 0 0;font-size:11px;font-weight:bold;overflow-wrap:anywhere}.items{margin-top:26px}.items-heading{display:flex;justify-content:space-between;align-items:end;margin-bottom:8px}.items-heading h2{margin:0;font-size:14px}.items-heading span{color:#64748b;font-size:10px}table{width:100%;border-collapse:collapse;font-size:11px}th{border-top:1px solid #cbd5e1;border-bottom:1px solid #cbd5e1;background:#f8fafc;padding:9px 10px;text-align:left}td{border-bottom:1px solid #e2e8f0;padding:12px 10px}th:last-child,td:last-child{text-align:right}.totals{display:flex;justify-content:flex-end;margin-top:18px}.totals dl{width:260px;margin:0}.total-row{display:flex;justify-content:space-between;gap:20px;padding:6px 0}.total-row dt{color:#475569}.total-row dd{margin:0;font-variant-numeric:tabular-nums}.total-row.final{margin-top:4px;border-top:2px solid #17375c;padding-top:9px;font-size:13px;font-weight:bold}.signatures{display:flex;justify-content:space-between;gap:48px;margin-top:58px}.signature-block{width:220px;text-align:center}.signature-name{min-height:16px;font-size:11px;font-weight:bold}.signature-line{margin-top:28px;border-top:1px solid #94a3b8;padding-top:7px;color:#475569;font-size:10px}.footer{margin-top:28px;border-top:1px solid #e2e8f0;padding-top:9px;color:#64748b;font-size:9px;text-align:center}@page{size:A4;margin:14mm}@media print{.receipt{padding:0}.header,.content,.items,table,.totals,.signatures,.footer{break-inside:avoid}}
-            </style></head><body><main class="receipt"><header class="header"><div class="brand"><img src="${logoUrl}" alt="${escapeHtml(branding?.name ?? "CMUD")} logo"><p>${escapeHtml(receiptBranchOffice)}</p>${instituteContact ? `<p>${escapeHtml(instituteContact)}</p>` : ""}</div><div class="header-title"><h1>PAYMENT RECEIPT</h1><p>Student payment record</p></div></header><section class="content"><div><h2 class="label">Student</h2><p class="student-name">${escapeHtml(receiptStudent?.full_name ?? "Student")}</p><p class="student-extra">Student ID: ${escapeHtml(receiptStudent?.student_code ?? "")}</p><p class="student-extra">Course: ${escapeHtml(receiptCourseName ?? "—")}</p><p class="student-extra">Batch: ${escapeHtml(receiptBatchName ?? "—")}</p></div><dl class="meta">${receiptMetadata}</dl></section><section class="items"><div class="items-heading"><h2>${escapeHtml(charge.description)}</h2><span>Currency: BDT</span></div><table><thead><tr><th>#</th><th>Payment detail</th><th>Amount received</th></tr></thead><tbody><tr><td>1</td><td>${escapeHtml(charge.category)} payment</td><td>${escapeHtml(money(payment.amount))}</td></tr></tbody></table></section><section class="totals"><dl><div class="total-row"><dt>Charge total</dt><dd>${escapeHtml(money(charge.amount))}</dd></div><div class="total-row"><dt>Paid to date</dt><dd>${escapeHtml(money(collected))}</dd></div><div class="total-row final"><dt>Balance due</dt><dd>${escapeHtml(money(receiptDue))}</dd></div></dl></section><section class="signatures"><div class="signature-block"><div class="signature-name">${escapeHtml(issuer)}</div><div class="signature-line">Issued by / Signature</div></div><div class="signature-block"><div class="signature-name">${escapeHtml(receiptStudent?.full_name ?? "Student")}</div><div class="signature-line">Received by / Student signature</div></div></section></main><script>window.addEventListener('load',function(){window.focus();window.print();});window.addEventListener('afterprint',function(){window.close();});</script></body></html>`);
+            *{box-sizing:border-box}body{margin:0;color:#111827;font:12px Arial,sans-serif}.receipt{width:100%;padding:32px 40px}.header{display:flex;justify-content:space-between;gap:24px;border-bottom:2px solid #17375c;padding-bottom:18px}.brand img{display:block;width:auto;height:48px;max-width:190px;object-fit:contain;object-position:left}.brand p{margin:5px 0 0;color:#64748b;font-size:11px}.header-title{text-align:right}.header-title h1{margin:0;color:#17375c;font-size:22px}.header-title p{margin:5px 0 0;color:#64748b;font-size:10px;font-weight:bold;letter-spacing:.16em;text-transform:uppercase}.content{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:24px}.label{margin:0 0 8px;color:#64748b;font-size:10px;font-weight:bold;letter-spacing:.14em;text-transform:uppercase}.student-name{margin:0;font-size:15px;font-weight:bold}.student-extra{margin:5px 0 0;color:#475569;font-size:11px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin:0;padding:13px;border:1px solid #e2e8f0;border-radius:6px}.meta dt{color:#64748b;font-size:9px}.meta dd{margin:3px 0 0;font-size:11px;font-weight:bold;overflow-wrap:anywhere}.items{margin-top:26px}.items-heading{display:flex;justify-content:space-between;align-items:end;margin-bottom:8px}.items-heading h2{margin:0;font-size:14px}.items-heading span{color:#64748b;font-size:10px}table{width:100%;border-collapse:collapse;font-size:11px}th{border-top:1px solid #cbd5e1;border-bottom:1px solid #cbd5e1;background:#f8fafc;padding:9px 10px;text-align:left}td{border-bottom:1px solid #e2e8f0;padding:12px 10px}th:last-child,td:last-child{text-align:right}.signatures{display:flex;justify-content:space-between;gap:48px;margin-top:58px}.signature-block{width:220px;text-align:center}.signature-name{min-height:16px;font-size:11px;font-weight:bold}.signature-line{margin-top:28px;border-top:1px solid #94a3b8;padding-top:7px;color:#475569;font-size:10px}.footer{margin-top:28px;border-top:1px solid #e2e8f0;padding-top:9px;color:#64748b;font-size:9px;text-align:center}@page{size:A4;margin:14mm}@media print{.receipt{padding:0}.header,.content,.items,table,.signatures,.footer{break-inside:avoid}}
+            </style></head><body><main class="receipt"><header class="header"><div class="brand"><img src="${logoUrl}" alt="${escapeHtml(branding?.name ?? "CMUD")} logo"><p>${escapeHtml(receiptBranchOffice)}</p>${instituteContact ? `<p>${escapeHtml(instituteContact)}</p>` : ""}</div><div class="header-title"><h1>PAYMENT RECEIPT</h1><p>Student payment record</p></div></header><section class="content"><div><h2 class="label">Student</h2><p class="student-name">${escapeHtml(receiptStudent?.full_name ?? "Student")}</p><p class="student-extra">Student ID: ${escapeHtml(receiptStudent?.student_code ?? "")}</p><p class="student-extra">Course: ${escapeHtml(receiptCourseName ?? "—")}</p><p class="student-extra">Batch: ${escapeHtml(receiptBatchName ?? "—")}</p></div><dl class="meta">${receiptMetadata}</dl></section><section class="items"><div class="items-heading"><h2>${escapeHtml(payment.description)}</h2><span>Currency: BDT</span></div><table><thead><tr><th>#</th><th>Payment detail</th><th>Amount received</th></tr></thead><tbody><tr><td>1</td><td>${escapeHtml(payment.category)} payment</td><td>${escapeHtml(money(payment.amount))}</td></tr></tbody></table></section><section class="signatures"><div class="signature-block"><div class="signature-name">${escapeHtml(issuer)}</div><div class="signature-line">Issued by / Signature</div></div><div class="signature-block"><div class="signature-name">${escapeHtml(receiptStudent?.full_name ?? "Student")}</div><div class="signature-line">Received by / Student signature</div></div></section></main><script>window.addEventListener('load',function(){window.focus();window.print();});window.addEventListener('afterprint',function(){window.close();});</script></body></html>`);
         printWindow.document.close();
     }
 
@@ -980,7 +1007,7 @@ export default function StudentBillWorkspace() {
                                 {pageTitle}
                             </h1>
                             <p className="mt-2 text-sm text-cyan-50/85">
-                                Find student payment records and record cash
+                                Find student payment records and record
                                 receipts.
                             </p>
                         </div>
@@ -988,16 +1015,16 @@ export default function StudentBillWorkspace() {
                             <button
                                 type="button"
                                 onClick={() => void openExpenseDialog()}
-                                disabled={!enrollmentId}
+                                disabled={!enrollmentId || loadingEnrollment}
                                 className="inline-flex items-center gap-2 rounded-xl border border-white/30 px-4 py-3 text-sm font-semibold text-white hover:bg-white/10 disabled:opacity-50"
                             >
-                                <Plus size={17} /> Issue expense
+                                <Plus size={17} /> Add other bill
                             </button>
                             <button
                                 type="button"
                                 onClick={() => {
                                     if (enrollmentId) {
-                                        openPayment();
+                                        setDialog("payment-type");
                                         return;
                                     }
                                     const firstDueCharge = chargeRows.find(
@@ -1014,11 +1041,7 @@ export default function StudentBillWorkspace() {
                                     loadingCharges ||
                                     openingRegisterPayment ||
                                     (enrollmentId
-                                        ? charges.every(
-                                              (charge) =>
-                                                  charge.cancelled ||
-                                                  Number(charge.due) <= 0,
-                                          )
+                                        ? loadingEnrollment
                                         : !chargeRows.some(
                                               (charge) =>
                                                   !charge.cancelled &&
@@ -1027,7 +1050,7 @@ export default function StudentBillWorkspace() {
                                 }
                                 className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-[#17375C] hover:bg-cyan-50 disabled:opacity-50"
                             >
-                                <CreditCard size={17} /> Record payment
+                                <CreditCard size={17} /> Add student payment
                             </button>
                         </div>
                     </header>
@@ -1054,8 +1077,9 @@ export default function StudentBillWorkspace() {
                                     Find billing records
                                 </h2>
                                 <p className="mt-1 text-xs text-slate-500">
-                                    Search by student ID or name, then narrow
-                                    the list by course and batch.
+                                    Choose a course to load its batches, then
+                                    press Search to filter by course, batch,
+                                    student ID, or name.
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">
@@ -1120,7 +1144,9 @@ export default function StudentBillWorkspace() {
                                 <select
                                     value={courseIdFilter}
                                     onChange={(event) => {
-                                        setCourseIdFilter(event.target.value);
+                                        const selectedCourseId =
+                                            event.target.value;
+                                        setCourseIdFilter(selectedCourseId);
                                         setBatchIdFilter("");
                                         setBatchOptions([]);
                                         setRegisterPage(1);
@@ -1143,7 +1169,9 @@ export default function StudentBillWorkspace() {
                                 <select
                                     value={batchIdFilter}
                                     onChange={(event) => {
-                                        setBatchIdFilter(event.target.value);
+                                        const selectedBatchId =
+                                            event.target.value;
+                                        setBatchIdFilter(selectedBatchId);
                                         setRegisterPage(1);
                                     }}
                                     disabled={!courseIdFilter}
@@ -1212,12 +1240,10 @@ export default function StudentBillWorkspace() {
                                     <tr>
                                         {[
                                             "Receipt",
-                                            "Charge",
                                             "Student",
                                             "Payment date",
                                             "Amount",
                                             "Method",
-                                            "Issued by",
                                             "Status",
                                             "Actions",
                                         ].map((label) => (
@@ -1235,17 +1261,6 @@ export default function StudentBillWorkspace() {
                                         <tr key={record.payment_key}>
                                             <td className="px-5 py-4 font-mono text-xs whitespace-nowrap text-[#17375C]">
                                                 {record.payment_number}
-                                            </td>
-                                            <td className="px-5 py-4">
-                                                <p className="font-mono text-xs whitespace-nowrap text-[#17375C]">
-                                                    {record.charge.number}
-                                                </p>
-                                                <p className="mt-1 min-w-40 text-xs text-slate-600">
-                                                    {record.charge.description}
-                                                </p>
-                                                <p className="mt-1 text-xs text-slate-400">
-                                                    {record.charge.category}
-                                                </p>
                                             </td>
                                             <td className="px-5 py-4">
                                                 <p className="font-medium whitespace-nowrap text-[#17375C]">
@@ -1267,10 +1282,6 @@ export default function StudentBillWorkspace() {
                                             <td className="px-5 py-4 text-xs whitespace-nowrap">
                                                 {record.payment_method ??
                                                     "Cash"}
-                                            </td>
-                                            <td className="px-5 py-4 text-xs whitespace-nowrap">
-                                                {record.recorded_by_name ??
-                                                    "N/A"}
                                             </td>
                                             <td className="px-5 py-4">
                                                 <span
@@ -1304,7 +1315,6 @@ export default function StudentBillWorkspace() {
                                                             type="button"
                                                             onClick={() =>
                                                                 printReceipt(
-                                                                    record.charge,
                                                                     record,
                                                                     {
                                                                         student:
@@ -1321,13 +1331,6 @@ export default function StudentBillWorkspace() {
                                                                             record
                                                                                 .enrollment
                                                                                 .branch_name,
-                                                                        paidToDate:
-                                                                            record
-                                                                                .charge
-                                                                                .paid,
-                                                                        due: record
-                                                                            .charge
-                                                                            .due,
                                                                     },
                                                                 )
                                                             }
@@ -1347,7 +1350,7 @@ export default function StudentBillWorkspace() {
                                     {!registerRows.length && (
                                         <tr>
                                             <td
-                                                colSpan={9}
+                                                colSpan={7}
                                                 className="px-6 py-12 text-center text-slate-500"
                                             >
                                                 {loadingRegister
@@ -1414,8 +1417,10 @@ export default function StudentBillWorkspace() {
                 >
                     <DialogHeader>
                         <DialogTitle>
-                            {dialog === "payment"
-                                ? "Record cash payment"
+                            {dialog === "payment-type"
+                                ? "Choose payment type"
+                                : dialog === "payment"
+                                ? "Record student payment"
                                 : dialog === "expense"
                                   ? "Issue student expense"
                                   : selectedPayment
@@ -1423,8 +1428,10 @@ export default function StudentBillWorkspace() {
                                     : "Charge details"}
                         </DialogTitle>
                         <DialogDescription>
-                            {dialog === "payment"
-                                ? "The payment is recorded as cash against the selected enrollment charge."
+                            {dialog === "payment-type"
+                                ? "Choose tuition payment or create an other-bill payment for the selected student."
+                                : dialog === "payment"
+                                ? "Record a payment against the selected enrollment charge."
                                 : dialog === "expense"
                                   ? "Issue an approved expense price against this enrollment."
                                   : selectedPayment
@@ -1432,6 +1439,52 @@ export default function StudentBillWorkspace() {
                                     : "Review the selected student charge."}
                         </DialogDescription>
                     </DialogHeader>
+                    {dialog === "payment-type" && (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <button
+                                type="button"
+                                disabled={
+                                    !charges.some(
+                                        (charge) =>
+                                            charge.kind === "tuition" &&
+                                            !charge.cancelled &&
+                                            Number(charge.due) > 0,
+                                    )
+                                }
+                                onClick={() => {
+                                    const tuitionCharge = charges.find(
+                                        (charge) =>
+                                            charge.kind === "tuition" &&
+                                            !charge.cancelled &&
+                                            Number(charge.due) > 0,
+                                    );
+                                    if (tuitionCharge) openPayment(tuitionCharge);
+                                }}
+                                className="rounded-xl border border-slate-200 p-4 text-left hover:border-teal-600 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <span className="block font-semibold text-[#17375C]">
+                                    Student tuition payment
+                                </span>
+                                <span className="mt-1 block text-xs text-slate-500">
+                                    Record a payment against issued tuition.
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                disabled={!enrollmentId || loadingEnrollment}
+                                onClick={() => void openExpenseDialog()}
+                                className="rounded-xl border border-slate-200 p-4 text-left hover:border-teal-600 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <span className="block font-semibold text-[#17375C]">
+                                    Student other bill payment
+                                </span>
+                                <span className="mt-1 block text-xs text-slate-500">
+                                    Create an other bill and collect now or
+                                    record it for later payment.
+                                </span>
+                            </button>
+                        </div>
+                    )}
                     {dialog === "payment" && (
                         <form onSubmit={submitPayment} className="space-y-4">
                             {!selectedCharge && (
@@ -1524,7 +1577,37 @@ export default function StudentBillWorkspace() {
                                 </label>
                             </div>
                             <label className="block text-xs font-medium text-slate-600">
-                                Cash account
+                                Payment method
+                                <select
+                                    required
+                                    value={paymentForm.method_id}
+                                    onChange={(event) =>
+                                        setPaymentForm({
+                                            ...paymentForm,
+                                            method_id: event.target.value,
+                                            reference: "",
+                                            payer_phone: "",
+                                        })
+                                    }
+                                    className={field}
+                                >
+                                    <option value="">
+                                        Select a payment method
+                                    </option>
+                                    {paymentOptions.payment_methods.map(
+                                        (method) => (
+                                            <option
+                                                key={method.id}
+                                                value={method.id}
+                                            >
+                                                {method.name}
+                                            </option>
+                                        ),
+                                    )}
+                                </select>
+                            </label>
+                            <label className="block text-xs font-medium text-slate-600">
+                                Deposit account
                                 <select
                                     required
                                     value={paymentForm.account_id}
@@ -1537,15 +1620,16 @@ export default function StudentBillWorkspace() {
                                     className={field}
                                 >
                                     <option value="">
-                                        Select a cash account
+                                        Select an account
                                     </option>
-                                    {paymentOptions.cash_accounts.map(
+                                    {paymentOptions.financial_accounts.map(
                                         (account) => (
                                             <option
                                                 key={account.id}
                                                 value={account.id}
                                             >
                                                 {account.name}
+                                                {` · ${account.account_type.replaceAll("_", " ")}`}
                                                 {account.branch_id === null
                                                     ? " · Institute account"
                                                     : ""}
@@ -1555,8 +1639,12 @@ export default function StudentBillWorkspace() {
                                 </select>
                             </label>
                             <label className="block text-xs font-medium text-slate-600">
-                                Transaction / reference (optional)
+                                Transaction / reference
                                 <input
+                                    required={
+                                        selectedPaymentMethod?.requires_transaction_reference ??
+                                        false
+                                    }
                                     value={paymentForm.reference}
                                     onChange={(event) =>
                                         setPaymentForm({
@@ -1567,6 +1655,23 @@ export default function StudentBillWorkspace() {
                                     className={field}
                                 />
                             </label>
+                            {selectedPaymentMethod?.requires_sender_phone && (
+                                <label className="block text-xs font-medium text-slate-600">
+                                    Sender phone
+                                    <input
+                                        required
+                                        type="tel"
+                                        value={paymentForm.payer_phone}
+                                        onChange={(event) =>
+                                            setPaymentForm({
+                                                ...paymentForm,
+                                                payer_phone: event.target.value,
+                                            })
+                                        }
+                                        className={field}
+                                    />
+                                </label>
+                            )}
                             <label className="block text-xs font-medium text-slate-600">
                                 Remarks (optional)
                                 <textarea
@@ -1581,10 +1686,16 @@ export default function StudentBillWorkspace() {
                                     className={`${field} h-auto py-3`}
                                 />
                             </label>
-                            {!paymentOptions.cash_accounts.length && (
+                            {!paymentOptions.financial_accounts.length && (
                                 <p className="text-sm text-amber-700">
-                                    No active cash account is configured for
+                                    No active financial account is configured for
                                     this enrollment.
+                                </p>
+                            )}
+                            {!paymentOptions.payment_methods.length && (
+                                <p className="text-sm text-amber-700">
+                                    No active payment method is configured for
+                                    this institute.
                                 </p>
                             )}
                             {error && (
@@ -1608,7 +1719,8 @@ export default function StudentBillWorkspace() {
                                     type="submit"
                                     disabled={
                                         saving ||
-                                        !paymentOptions.cash_accounts.length
+                                        !paymentOptions.financial_accounts.length ||
+                                        !paymentOptions.payment_methods.length
                                     }
                                     className={primary}
                                 >
@@ -1786,6 +1898,184 @@ export default function StudentBillWorkspace() {
                                     quantity.
                                 </div>
                             </div>
+                            <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-4 text-sm">
+                                <input
+                                    type="checkbox"
+                                    checked={expenseForm.collect_payment}
+                                    onChange={(event) =>
+                                        setExpenseForm({
+                                            ...expenseForm,
+                                            collect_payment:
+                                                event.target.checked,
+                                            payment_amount: event.target.checked
+                                                ? (
+                                                      Number(
+                                                          currentPrice?.amount ??
+                                                              0,
+                                                      ) *
+                                                      Number(
+                                                          expenseForm.quantity,
+                                                      )
+                                                  ).toFixed(2)
+                                                : "",
+                                            payment_account_id: "",
+                                            payment_method_id: "",
+                                            payment_reference: "",
+                                            payer_phone: "",
+                                        })
+                                    }
+                                    className="mt-0.5"
+                                />
+                                <span>
+                                    <span className="block font-medium text-slate-700">
+                                        Record payment now
+                                    </span>
+                                    <span className="mt-1 block text-xs text-slate-500">
+                                        Leave unchecked to issue the bill and
+                                        collect payment later.
+                                    </span>
+                                </span>
+                            </label>
+                            {expenseForm.collect_payment && (
+                                <div className="space-y-4 rounded-xl bg-slate-50 p-4">
+                                    <div className="grid gap-4 sm:grid-cols-2">
+                                        <label className="block text-xs font-medium text-slate-600">
+                                            Payment amount (BDT)
+                                            <input
+                                                required
+                                                type="number"
+                                                min="0.01"
+                                                step="0.01"
+                                                value={
+                                                    expenseForm.payment_amount
+                                                }
+                                                onChange={(event) =>
+                                                    setExpenseForm({
+                                                        ...expenseForm,
+                                                        payment_amount:
+                                                            event.target.value,
+                                                    })
+                                                }
+                                                className={field}
+                                            />
+                                        </label>
+                                        <label className="block text-xs font-medium text-slate-600">
+                                            Payment method
+                                            <select
+                                                required
+                                                value={
+                                                    expenseForm.payment_method_id
+                                                }
+                                                onChange={(event) =>
+                                                    setExpenseForm({
+                                                        ...expenseForm,
+                                                        payment_method_id:
+                                                            event.target.value,
+                                                        payment_reference: "",
+                                                        payer_phone: "",
+                                                    })
+                                                }
+                                                className={field}
+                                            >
+                                                <option value="">
+                                                    Select a payment method
+                                                </option>
+                                                {paymentOptions.payment_methods.map(
+                                                    (method) => (
+                                                        <option
+                                                            key={method.id}
+                                                            value={method.id}
+                                                        >
+                                                            {method.name}
+                                                        </option>
+                                                    ),
+                                                )}
+                                            </select>
+                                        </label>
+                                    </div>
+                                    <label className="block text-xs font-medium text-slate-600">
+                                        Deposit account
+                                        <select
+                                            required
+                                            value={
+                                                expenseForm.payment_account_id
+                                            }
+                                            onChange={(event) =>
+                                                setExpenseForm({
+                                                    ...expenseForm,
+                                                    payment_account_id:
+                                                        event.target.value,
+                                                })
+                                            }
+                                            className={field}
+                                        >
+                                            <option value="">
+                                                Select an account
+                                            </option>
+                                            {paymentOptions.financial_accounts.map(
+                                                (account) => (
+                                                    <option
+                                                        key={account.id}
+                                                        value={account.id}
+                                                    >
+                                                        {account.name} ·{" "}
+                                                        {account.account_type.replaceAll(
+                                                            "_",
+                                                            " ",
+                                                        )}
+                                                    </option>
+                                                ),
+                                            )}
+                                        </select>
+                                    </label>
+                                    <label className="block text-xs font-medium text-slate-600">
+                                        Transaction / reference
+                                        <input
+                                            required={
+                                                selectedExpensePaymentMethod?.requires_transaction_reference ??
+                                                false
+                                            }
+                                            value={
+                                                expenseForm.payment_reference
+                                            }
+                                            onChange={(event) =>
+                                                setExpenseForm({
+                                                    ...expenseForm,
+                                                    payment_reference:
+                                                        event.target.value,
+                                                })
+                                            }
+                                            className={field}
+                                        />
+                                    </label>
+                                    {selectedExpensePaymentMethod?.requires_sender_phone && (
+                                        <label className="block text-xs font-medium text-slate-600">
+                                            Sender phone
+                                            <input
+                                                required
+                                                type="tel"
+                                                value={expenseForm.payer_phone}
+                                                onChange={(event) =>
+                                                    setExpenseForm({
+                                                        ...expenseForm,
+                                                        payer_phone:
+                                                            event.target.value,
+                                                    })
+                                                }
+                                                className={field}
+                                            />
+                                        </label>
+                                    )}
+                                    {!paymentOptions.payment_methods.length ||
+                                    !paymentOptions.financial_accounts.length ? (
+                                        <p className="text-sm text-amber-700">
+                                            Active payment methods and financial
+                                            accounts are required to collect
+                                            payment now.
+                                        </p>
+                                    ) : null}
+                                </div>
+                            )}
                             <label className="block text-xs font-medium text-slate-600">
                                 Description (optional)
                                 <input
@@ -1835,7 +2125,13 @@ export default function StudentBillWorkspace() {
                                     disabled={
                                         saving ||
                                         !expenseForm.type_id ||
-                                        !expenseForm.price_id
+                                        !expenseForm.price_id ||
+                                        (expenseForm.collect_payment &&
+                                            (!expenseForm.payment_amount ||
+                                                !expenseForm.payment_account_id ||
+                                                !expenseForm.payment_method_id ||
+                                                !paymentOptions.financial_accounts
+                                                    .length))
                                     }
                                     className={primary}
                                 >
@@ -1847,12 +2143,17 @@ export default function StudentBillWorkspace() {
                                     ) : (
                                         <Plus size={16} />
                                     )}
-                                    {saving ? "Issuing…" : "Issue expense"}
+                                    {saving
+                                        ? "Saving…"
+                                        : expenseForm.collect_payment
+                                          ? "Issue bill & record payment"
+                                          : "Issue bill"}
                                 </button>
                             </div>
                         </form>
                     )}
-                    {dialog === "view" && selectedCharge && (
+                    {dialog === "view" &&
+                        (selectedCharge || selectedPayment) && (
                         <div className="space-y-5">
                             <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
                                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1870,7 +2171,11 @@ export default function StudentBillWorkspace() {
                                     </div>
                                     <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
                                         {selectedPayment?.status ??
-                                            statusLabel(selectedCharge)}
+                                            (selectedCharge
+                                                ? statusLabel(
+                                                      selectedCharge,
+                                                  )
+                                                : "Payment")}
                                     </span>
                                 </div>
                                 <div className="mt-4 grid gap-3 border-t border-slate-200 pt-4 sm:grid-cols-2">
@@ -1879,8 +2184,9 @@ export default function StudentBillWorkspace() {
                                             Charge
                                         </p>
                                         <p className="mt-1 text-sm font-medium">
-                                            {selectedCharge.number} ·{" "}
-                                            {selectedCharge.description}
+                                            {selectedPayment
+                                                ? selectedPayment.payment_number
+                                                : `${selectedCharge?.number} · ${selectedCharge?.description}`}
                                         </p>
                                     </div>
                                     <div>
@@ -1888,7 +2194,13 @@ export default function StudentBillWorkspace() {
                                             Issue date
                                         </p>
                                         <p className="mt-1 text-sm font-medium">
-                                            {dateLabel(selectedCharge.issuedOn)}
+                                            {selectedPayment
+                                                ? dateTimeLabel(
+                                                      selectedPayment.paid_at,
+                                                  )
+                                                : dateLabel(
+                                                      selectedCharge?.issuedOn,
+                                                  )}
                                         </p>
                                     </div>
                                 </div>
@@ -1958,7 +2270,8 @@ export default function StudentBillWorkspace() {
                                     </dl>
                                 </section>
                             )}
-                            <section className="grid gap-3 sm:grid-cols-3">
+                            {selectedCharge && !selectedPayment && (
+                                <section className="grid gap-3 sm:grid-cols-2">
                                 <div className="rounded-xl border border-slate-200 p-4">
                                     <p className="text-xs text-slate-500">
                                         Payable
@@ -1975,15 +2288,8 @@ export default function StudentBillWorkspace() {
                                         {money(selectedCharge.paid)}
                                     </p>
                                 </div>
-                                <div className="rounded-xl border border-slate-200 p-4">
-                                    <p className="text-xs text-slate-500">
-                                        Due
-                                    </p>
-                                    <p className="mt-1 font-semibold text-amber-700">
-                                        {money(selectedCharge.due)}
-                                    </p>
-                                </div>
-                            </section>
+                                </section>
+                            )}
                         </div>
                     )}
                 </DialogContent>
@@ -1991,3 +2297,4 @@ export default function StudentBillWorkspace() {
         </AppLayout>
     );
 }
+

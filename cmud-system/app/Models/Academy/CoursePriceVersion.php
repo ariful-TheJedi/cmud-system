@@ -49,8 +49,8 @@ class CoursePriceVersion extends Model
         return $this->belongsTo(User::class, 'approved_by');
     }
 
-    public function studentTuitions(): HasMany
+    public function enrollments(): HasMany
     {
-        return $this->hasMany(\App\Models\Finance\StudentTuition::class, 'course_price_version_id');
+        return $this->hasMany(Enrollment::class, 'course_price_version_id');
     }
 }

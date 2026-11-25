@@ -318,7 +318,7 @@ class StudentEnrollmentService
             if ($courseChanged && (
                 $lockedEnrollment->stageRecords()->exists()
                 || $lockedEnrollment->certificates()->exists()
-                || $lockedEnrollment->tuition()->exists()
+                || $lockedEnrollment->hasTuition()
                 || $lockedEnrollment->expenses()->exists()
             )) {
                 throw ValidationException::withMessages([

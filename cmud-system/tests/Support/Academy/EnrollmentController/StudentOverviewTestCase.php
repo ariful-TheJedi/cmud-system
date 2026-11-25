@@ -17,12 +17,12 @@ use App\Models\Finance\StudentExpense;
 use App\Models\Finance\StudentExpensePayment;
 use App\Models\Finance\StudentExpensePriceVersion;
 use App\Models\Finance\StudentExpenseType;
-use App\Models\Finance\StudentTuition;
 use App\Models\Finance\StudentTuitionPayment;
 use App\Models\Institute\Branch;
 use App\Models\Institute\Institute;
 use App\Models\Security\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\EnrollmentTuition;
 use Tests\TestCase;
 
 abstract class StudentOverviewTestCase extends TestCase
@@ -249,8 +249,8 @@ abstract class StudentOverviewTestCase extends TestCase
         bool $waiverApproved = false,
         string $dueOn = '2099-01-01',
         string $status = 'issued',
-    ): StudentTuition {
-        return StudentTuition::query()->create([
+    ): Enrollment {
+        return EnrollmentTuition::set([
             'enrollment_id' => $enrollment->id,
             'tuition_number' => 'TUI-OVERVIEW-'.$suffix,
             'original_amount' => $amount,
@@ -264,7 +264,7 @@ abstract class StudentOverviewTestCase extends TestCase
     }
 
     protected function createTuitionPayment(
-        StudentTuition $tuition,
+        Enrollment $tuition,
         string $suffix,
         string $amount,
         string $status = 'confirmed',
@@ -272,7 +272,7 @@ abstract class StudentOverviewTestCase extends TestCase
         ?string $receipt = null,
     ): StudentTuitionPayment {
         return StudentTuitionPayment::query()->create([
-            'student_tuition_id' => $tuition->id,
+            'enrollment_id' => $tuition->id,
             'payment_number' => 'TUIP-OVERVIEW-'.$suffix,
             'payment_method_id' => $this->paymentMethod->id,
             'financial_account_id' => $this->financialAccount->id,

@@ -4,15 +4,15 @@ namespace Tests\Feature\Integration\Finance;
 
 use App\Models\Finance\StudentTuitionPayment;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use PHPUnit\Framework\TestCase;
+use Tests\TestCase;
 
 class PaymentServiceTest extends TestCase
 {
-    public function test_tuition_payment_model_exposes_its_tuition_and_payment_method_relationships(): void
+    public function test_tuition_payment_model_exposes_its_enrollment_and_payment_method_relationships(): void
     {
         $payment = new StudentTuitionPayment;
 
-        $this->assertInstanceOf(BelongsTo::class, $payment->tuition());
+        $this->assertInstanceOf(BelongsTo::class, $payment->enrollment());
         $this->assertInstanceOf(BelongsTo::class, $payment->paymentMethod());
         $this->assertInstanceOf(BelongsTo::class, $payment->financialAccount());
     }

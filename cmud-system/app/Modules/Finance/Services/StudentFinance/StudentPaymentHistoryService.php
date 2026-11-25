@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Modules\Finance\Services\StudentBill;
+namespace App\Modules\Finance\Services\StudentFinance;
 
 use App\Models\Academy\Student;
 use App\Models\Finance\StudentExpensePayment;
@@ -52,9 +52,9 @@ class StudentPaymentHistoryService
         if (preg_match('/^tuition-(\d+)$/', $paymentKey, $matches) === 1) {
             $payment = StudentTuitionPayment::query()
                 ->whereKey((int) $matches[1])
-                ->with(['tuition.enrollment.course', 'paymentMethod'])
+                ->with(['enrollment.course', 'paymentMethod'])
                 ->firstOrFail();
-            $this->assertBranchAccess((int) $payment->tuition?->enrollment?->branch_id, $viewer);
+            $this->assertBranchAccess((int) $payment->enrollment?->branch_id, $viewer);
 
             return $this->formatTuitionPayment($payment);
         }
@@ -86,11 +86,11 @@ class StudentPaymentHistoryService
     private function tuitionPayments(Student $student, array $filters, User $viewer): array
     {
         $query = StudentTuitionPayment::query()
-            ->whereHas('tuition', fn ($tuition) => $tuition->whereHas('enrollment', fn ($enrollment) => $enrollment
+            ->whereHas('enrollment', fn ($enrollment) => $enrollment
                 ->where('student_id', $student->id)
-                ->when(! $viewer->is_super_admin, fn ($query) => $query->where('branch_id', $viewer->branch_id))))
-            ->with(['tuition.enrollment.course', 'paymentMethod']);
-        $this->applyFilters($query, $filters, 'tuition.enrollment');
+                ->when(! $viewer->is_super_admin, fn ($query) => $query->where('branch_id', $viewer->branch_id)))
+            ->with(['enrollment.course', 'paymentMethod']);
+        $this->applyFilters($query, $filters, 'enrollment');
 
         return $query->get()->map(fn (StudentTuitionPayment $payment): array => $this->formatTuitionPayment($payment))->all();
     }
@@ -144,8 +144,7 @@ class StudentPaymentHistoryService
     /** @return array<string, mixed> */
     private function formatTuitionPayment(StudentTuitionPayment $payment): array
     {
-        $tuition = $payment->tuition;
-        $enrollment = $tuition?->enrollment;
+        $enrollment = $payment->enrollment;
 
         return $this->formatPayment(
             'tuition-'.$payment->id,

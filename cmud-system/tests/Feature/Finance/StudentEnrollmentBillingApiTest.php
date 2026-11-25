@@ -12,12 +12,12 @@ use App\Models\Finance\StudentExpense;
 use App\Models\Finance\StudentExpensePayment;
 use App\Models\Finance\StudentExpensePriceVersion;
 use App\Models\Finance\StudentExpenseType;
-use App\Models\Finance\StudentTuition;
 use App\Models\Finance\StudentTuitionPayment;
 use App\Models\Institute\Branch;
 use App\Models\Institute\Institute;
 use App\Models\Security\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\EnrollmentTuition;
 use Tests\TestCase;
 
 uses(TestCase::class, RefreshDatabase::class);
@@ -30,7 +30,7 @@ function enrollmentBillingFixture(): array
     $student = Student::factory()->create(['institute_id' => $institute->id, 'admission_branch_id' => $branch->id, 'student_code' => 'EB-STU-'.fake()->unique()->numerify('####')]);
     $course = Course::query()->create(['institute_id' => $institute->id, 'code' => 'EB-C-'.fake()->unique()->numerify('####'), 'name' => 'Enrollment Billing Course', 'duration_months' => 12, 'completion_period_months' => 15, 'is_active' => true, 'status' => 'active', 'is_available_for_enrollment' => true]);
     $enrollment = Enrollment::query()->create(['enrollment_code' => 'EB-ENR-'.fake()->unique()->numerify('####'), 'student_id' => $student->id, 'course_id' => $course->id, 'branch_id' => $branch->id, 'enrollment_date' => now()->toDateString(), 'expected_completion_on' => now()->addYear()->toDateString(), 'completion_deadline_on' => now()->addMonths(15)->toDateString(), 'status' => 'ongoing', 'is_active' => true]);
-    $tuition = StudentTuition::query()->create(['enrollment_id' => $enrollment->id, 'tuition_number' => 'EB-TUI-'.fake()->unique()->numerify('####'), 'original_amount' => '1000.00', 'waiver_amount' => '0.00', 'issued_on' => now()->toDateString(), 'status' => 'issued']);
+    $tuition = EnrollmentTuition::set(['enrollment_id' => $enrollment->id, 'tuition_number' => 'EB-TUI-'.fake()->unique()->numerify('####'), 'original_amount' => '1000.00', 'waiver_amount' => '0.00', 'issued_on' => now()->toDateString(), 'status' => 'issued']);
     $user = User::query()->create(['name' => 'Enrollment Cashier', 'email' => fake()->unique()->safeEmail(), 'password' => 'password', 'is_active' => true, 'branch_id' => $branch->id]);
     $method = PaymentMethod::query()->create(['institute_id' => $institute->id, 'code' => 'EB-CASH-'.fake()->unique()->numerify('####'), 'name' => 'Cash', 'is_active' => true]);
     $account = FinancialAccount::query()->create(['institute_id' => $institute->id, 'branch_id' => $branch->id, 'code' => 'EB-ACC-'.fake()->unique()->numerify('####'), 'name' => 'Branch Cash Drawer', 'account_type' => 'cash', 'currency_code' => 'BDT', 'opening_balance' => '0.00', 'opening_balance_as_of' => now(), 'is_active' => true]);
@@ -130,10 +130,106 @@ it('provides branch-scoped course and course-dependent batch filters for the cha
         ->assertJsonPath('data.0.enrollment.batch_name', $batch->name);
 });
 
+it('filters payment records by the selected course and its batch', function (): void {
+    $fixture = enrollmentBillingFixture();
+    $firstBatch = Batch::query()->create([
+        'course_id' => $fixture['course']->id,
+        'branch_id' => $fixture['branch']->id,
+        'code' => 'EB-FIRST-'.fake()->unique()->numerify('####'),
+        'name' => 'First Course Batch',
+        'starts_on' => now()->toDateString(),
+        'expected_ends_on' => now()->addYear()->toDateString(),
+        'status' => 'active',
+    ]);
+    $fixture['enrollment']->update(['batch_id' => $firstBatch->id]);
+
+    $secondCourse = Course::query()->create([
+        'institute_id' => $fixture['institute']->id,
+        'code' => 'EB-SECOND-'.fake()->unique()->numerify('####'),
+        'name' => 'Second Billing Course',
+        'duration_months' => 12,
+        'completion_period_months' => 15,
+        'is_active' => true,
+        'status' => 'active',
+        'is_available_for_enrollment' => true,
+    ]);
+    $secondBatch = Batch::query()->create([
+        'course_id' => $secondCourse->id,
+        'branch_id' => $fixture['branch']->id,
+        'code' => 'EB-SECOND-BATCH-'.fake()->unique()->numerify('####'),
+        'name' => 'Second Course Batch',
+        'starts_on' => now()->toDateString(),
+        'expected_ends_on' => now()->addYear()->toDateString(),
+        'status' => 'active',
+    ]);
+    $secondEnrollment = Enrollment::query()->create([
+        'enrollment_code' => 'EB-SECOND-ENR-'.fake()->unique()->numerify('####'),
+        'student_id' => $fixture['student']->id,
+        'course_id' => $secondCourse->id,
+        'branch_id' => $fixture['branch']->id,
+        'batch_id' => $secondBatch->id,
+        'enrollment_date' => now()->toDateString(),
+        'expected_completion_on' => now()->addYear()->toDateString(),
+        'completion_deadline_on' => now()->addMonths(15)->toDateString(),
+        'status' => 'ongoing',
+        'is_active' => true,
+    ]);
+    EnrollmentTuition::set([
+        'enrollment_id' => $secondEnrollment->id,
+        'tuition_number' => 'EB-SECOND-TUI-'.fake()->unique()->numerify('####'),
+        'original_amount' => '1000.00',
+        'waiver_amount' => '0.00',
+        'issued_on' => now()->toDateString(),
+        'status' => 'issued',
+    ]);
+
+    foreach ([$fixture['enrollment'], $secondEnrollment] as $index => $enrollment) {
+        $this->actingAs($fixture['user'])->postJson(
+            "/api/v1/enrollments/{$enrollment->id}/tuition/payments",
+            [
+                'amount' => '100.00',
+                'financial_account_id' => $fixture['account']->id,
+                'idempotency_key' => 'course-batch-register-'.$index,
+            ],
+        )->assertCreated();
+    }
+
+    $this->actingAs($fixture['user'])
+        ->getJson('/api/v1/student-payments/options?course_id='.$fixture['course']->id)
+        ->assertOk()
+        ->assertJsonCount(1, 'data.batches')
+        ->assertJsonPath('data.batches.0.id', $firstBatch->id);
+
+    $this->actingAs($fixture['user'])
+        ->getJson('/api/v1/student-payments?course_id='.$fixture['course']->id)
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.enrollment.enrollment_code', $fixture['enrollment']->enrollment_code);
+
+    $this->actingAs($fixture['user'])
+        ->getJson('/api/v1/student-payments?search='.urlencode($fixture['student']->student_code)
+            .'&course_id='.$secondCourse->id.'&batch_id='.$secondBatch->id)
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.enrollment.enrollment_code', $secondEnrollment->enrollment_code);
+
+    $this->actingAs($fixture['user'])
+        ->getJson('/api/v1/student-payments?search='.urlencode($fixture['student']->full_name)
+            .'&course_id='.$secondCourse->id.'&batch_id='.$secondBatch->id)
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.student.full_name', $fixture['student']->full_name);
+
+    $this->actingAs($fixture['user'])
+        ->getJson('/api/v1/student-payments?course_id='.$fixture['course']->id.'&batch_id='.$secondBatch->id)
+        ->assertOk()
+        ->assertJsonCount(0, 'data');
+});
+
 it('lists each payment record separately when one enrollment has multiple payments', function (): void {
     $fixture = enrollmentBillingFixture();
     $first = $this->actingAs($fixture['user'])->postJson(
-        "/api/v1/enrollments/{$fixture['enrollment']->id}/tuition/{$fixture['tuition']->id}/payments",
+        "/api/v1/enrollments/{$fixture['enrollment']->id}/tuition/payments",
         [
             'amount' => '125.00',
             'financial_account_id' => $fixture['account']->id,
@@ -141,7 +237,7 @@ it('lists each payment record separately when one enrollment has multiple paymen
         ],
     )->assertCreated()->json('data.payment.payment_number');
     $second = $this->actingAs($fixture['user'])->postJson(
-        "/api/v1/enrollments/{$fixture['enrollment']->id}/tuition/{$fixture['tuition']->id}/payments",
+        "/api/v1/enrollments/{$fixture['enrollment']->id}/tuition/payments",
         [
             'amount' => '175.00',
             'financial_account_id' => $fixture['account']->id,
@@ -154,7 +250,10 @@ it('lists each payment record separately when one enrollment has multiple paymen
         ->assertOk()
         ->assertJsonCount(2, 'data')
         ->assertJsonPath('meta.total', 2)
-        ->assertJsonPath('data.0.charge.paid', '300.00')
+        ->assertJsonPath('data.0.amount', '175.00')
+        ->assertJsonMissingPath('data.0.charge')
+        ->assertJsonMissingPath('data.0.due')
+        ->assertJsonMissingPath('data.0.waiver')
         ->assertJsonFragment(['payment_number' => $first, 'amount' => '125.00', 'recorded_by_name' => $fixture['user']->name])
         ->assertJsonFragment(['payment_number' => $second, 'amount' => '175.00', 'recorded_by_name' => $fixture['user']->name]);
 
@@ -215,6 +314,62 @@ it('includes expense payments as separate student payment records', function ():
         ->assertJsonPath('data.0.student.student_code', $fixture['student']->student_code);
 });
 
+it('can issue an other bill and record its payment atomically or leave it unpaid', function (): void {
+    $fixture = enrollmentBillingFixture();
+    $bankMethod = PaymentMethod::query()->create([
+        'institute_id' => $fixture['institute']->id,
+        'code' => 'EB-BANK-'.fake()->unique()->numerify('####'),
+        'name' => 'Bank Transfer',
+        'requires_transaction_reference' => true,
+        'is_active' => true,
+    ]);
+    $bankAccount = FinancialAccount::query()->create([
+        'institute_id' => $fixture['institute']->id,
+        'branch_id' => $fixture['branch']->id,
+        'code' => 'EB-BANK-ACC-'.fake()->unique()->numerify('####'),
+        'name' => 'Branch Bank Account',
+        'account_type' => 'bank',
+        'currency_code' => 'BDT',
+        'opening_balance' => '0.00',
+        'opening_balance_as_of' => now(),
+        'is_active' => true,
+    ]);
+    $payload = [
+        'student_expense_type_id' => $fixture['expenseType']->id,
+        'price_version_id' => $fixture['price']->id,
+        'payment' => [
+            'amount' => '125.00',
+            'financial_account_id' => $bankAccount->id,
+            'payment_method_id' => $bankMethod->id,
+            'idempotency_key' => 'other-bill-pay-now-001',
+            'transaction_reference' => 'OTHER-BILL-BANK-001',
+        ],
+    ];
+
+    $response = $this->actingAs($fixture['user'])
+        ->postJson("/api/v1/enrollments/{$fixture['enrollment']->id}/expenses", $payload)
+        ->assertCreated()
+        ->assertJsonPath('data.payment.amount', '125.00')
+        ->assertJsonPath('data.payment.payment_method', 'Bank Transfer')
+        ->assertJsonPath('data.payment.status', 'confirmed');
+
+    $this->actingAs($fixture['user'])
+        ->postJson("/api/v1/enrollments/{$fixture['enrollment']->id}/expenses", $payload)
+        ->assertOk()
+        ->assertJsonPath('data.idempotent_replay', true);
+
+    $changedMethodRetry = $payload;
+    unset($changedMethodRetry['payment']['payment_method_id']);
+    $this->actingAs($fixture['user'])
+        ->postJson("/api/v1/enrollments/{$fixture['enrollment']->id}/expenses", $changedMethodRetry)
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['idempotency_key']);
+
+    expect(StudentExpense::query()->count())->toBe(1)
+        ->and(StudentExpensePayment::query()->count())->toBe(1)
+        ->and($response->json('data.outstanding_balance'))->toBe('75.00');
+});
+
 it('returns enrollment-specific billing totals and records retry-safe expense payments', function (): void {
     $fixture = enrollmentBillingFixture();
     $this->actingAs($fixture['user'])->getJson("/api/v1/enrollments/{$fixture['enrollment']->id}/billing")
@@ -245,13 +400,13 @@ it('does not allow another branch to read a student or pay a different enrollmen
     $otherUser = User::query()->create(['name' => 'Other Branch User', 'email' => fake()->unique()->safeEmail(), 'password' => 'password', 'is_active' => true, 'branch_id' => $otherBranch->id]);
 
     $this->actingAs($otherUser)->getJson('/api/v1/students/search?student_id='.$fixture['student']->student_code)->assertNotFound();
-    $this->actingAs($fixture['user'])->postJson("/api/v1/enrollments/{$fixture['enrollment']->id}/tuition/{$fixture['tuition']->id}/payments", [
+    $this->actingAs($fixture['user'])->postJson("/api/v1/enrollments/{$fixture['enrollment']->id}/tuition/payments", [
         'amount' => '10.00', 'financial_account_id' => $fixture['account']->id, 'idempotency_key' => 'enrollment-check-001',
     ])->assertCreated();
     expect(StudentTuitionPayment::query()->count())->toBe(1);
 
     $otherEnrollment = Enrollment::query()->create(['enrollment_code' => 'EB-ENR-'.fake()->unique()->numerify('####'), 'student_id' => $fixture['student']->id, 'course_id' => $fixture['course']->id, 'branch_id' => $fixture['branch']->id, 'enrollment_date' => now()->toDateString(), 'expected_completion_on' => now()->addYear()->toDateString(), 'completion_deadline_on' => now()->addMonths(15)->toDateString(), 'status' => 'ongoing', 'is_active' => true]);
-    $otherTuition = StudentTuition::query()->create(['enrollment_id' => $otherEnrollment->id, 'tuition_number' => 'EB-TUI-'.fake()->unique()->numerify('####'), 'original_amount' => '300.00', 'waiver_amount' => '0.00', 'issued_on' => now()->toDateString(), 'status' => 'issued']);
+    $otherTuition = EnrollmentTuition::set(['enrollment_id' => $otherEnrollment->id, 'tuition_number' => 'EB-TUI-'.fake()->unique()->numerify('####'), 'original_amount' => '300.00', 'waiver_amount' => '0.00', 'issued_on' => now()->toDateString(), 'status' => 'issued']);
     $otherExpense = StudentExpense::query()->create([
         'expense_number' => 'EB-EXP-'.fake()->unique()->numerify('####'),
         'student_id' => $fixture['student']->id,
@@ -294,13 +449,13 @@ it('rejects overpayment and rejects an expense price from another enrollment con
 
 it('supports multiple partial tuition payments and returns the cleared enrollment balance', function (): void {
     $fixture = enrollmentBillingFixture();
-    $path = "/api/v1/enrollments/{$fixture['enrollment']->id}/tuition/{$fixture['tuition']->id}/payments";
+    $path = "/api/v1/enrollments/{$fixture['enrollment']->id}/tuition/payments";
     $this->actingAs($fixture['user'])->postJson($path, [
         'amount' => '400.00', 'financial_account_id' => $fixture['account']->id, 'idempotency_key' => 'tuition-part-1',
-    ])->assertCreated()->assertJsonPath('data.tuition.due_amount', '600.00');
+    ])->assertCreated()->assertJsonPath('data.total_paid', '400.00');
     $this->actingAs($fixture['user'])->postJson($path, [
         'amount' => '600.00', 'financial_account_id' => $fixture['account']->id, 'idempotency_key' => 'tuition-part-2',
-    ])->assertCreated()->assertJsonPath('data.tuition.due_amount', '0.00');
+    ])->assertCreated()->assertJsonPath('data.total_paid', '1000.00');
 
     $this->actingAs($fixture['user'])->getJson("/api/v1/enrollments/{$fixture['enrollment']->id}/payments")
         ->assertOk()->assertJsonCount(2, 'data');
@@ -309,7 +464,7 @@ it('supports multiple partial tuition payments and returns the cleared enrollmen
 
 it('rejects a reused payment key when its payload changes', function (): void {
     $fixture = enrollmentBillingFixture();
-    $path = "/api/v1/enrollments/{$fixture['enrollment']->id}/tuition/{$fixture['tuition']->id}/payments";
+    $path = "/api/v1/enrollments/{$fixture['enrollment']->id}/tuition/payments";
     $payload = [
         'amount' => '100.00',
         'financial_account_id' => $fixture['account']->id,
@@ -411,7 +566,7 @@ it('rejects a cash account scoped to another branch', function (): void {
         'is_active' => true,
     ]);
 
-    $this->actingAs($fixture['user'])->postJson("/api/v1/enrollments/{$fixture['enrollment']->id}/tuition/{$fixture['tuition']->id}/payments", [
+    $this->actingAs($fixture['user'])->postJson("/api/v1/enrollments/{$fixture['enrollment']->id}/tuition/payments", [
         'amount' => '100.00', 'financial_account_id' => $otherAccount->id, 'idempotency_key' => 'wrong-cash-account',
     ])->assertUnprocessable()->assertJsonValidationErrors(['financial_account_id']);
     expect(StudentTuitionPayment::query()->count())->toBe(0);

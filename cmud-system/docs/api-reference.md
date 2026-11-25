@@ -1,5 +1,7 @@
 # CMUD API Route Reference
 
+> **Tuition update (2026-11-25):** Tuition amounts, waiver approvals, issue/due dates and tuition status are stored on `enrollments`. Payments use `student_tuition_payments.enrollment_id` directly. Read tuition at `GET /api/v1/enrollments/{enrollment}/tuition`; record a payment at `POST /api/v1/enrollments/{enrollment}/tuition/payments`; load active payment methods and branch-compatible financial accounts at `GET /api/v1/enrollments/{enrollment}/payment-options`. Student tuition and other-bill payments use the selected enrollment's branch scope; non-super-admin users cannot read or record payments for another branch.
+
 This document describes the API routes currently registered in the application. It is based on `routes/api.php`, the module route files, controllers, requests, and resources. Planned features and routes that are not registered are not included.
 
 ## API conventions

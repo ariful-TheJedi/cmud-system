@@ -2,6 +2,7 @@
 
 namespace App\Models\Finance;
 
+use App\Models\Academy\Enrollment;
 use App\Models\Security\User;
 use Database\Factories\Finance\StudentTuitionPaymentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,17 +19,17 @@ class StudentTuitionPayment extends Model
         return StudentTuitionPaymentFactory::new();
     }
 
-    protected $fillable = ['student_tuition_id', 'payment_number', 'payment_method_id', 'financial_account_id', 'amount', 'paid_at', 'transaction_reference', 'payer_phone', 'proof_file_path', 'status', 'verification_method', 'verified_at', 'verified_by', 'verification_reference', 'verification_response', 'rejection_reason', 'recorded_by', 'notes'];
+    protected $fillable = ['enrollment_id', 'payment_number', 'payment_method_id', 'financial_account_id', 'amount', 'paid_at', 'transaction_reference', 'payer_phone', 'proof_file_path', 'status', 'verification_method', 'verified_at', 'verified_by', 'verification_reference', 'verification_response', 'rejection_reason', 'recorded_by', 'notes'];
 
     protected function casts(): array
     {
         return ['amount' => 'decimal:2', 'paid_at' => 'datetime', 'verified_at' => 'datetime', 'verification_response' => 'array'];
     }
 
-    /** @return BelongsTo<StudentTuition, $this> */
-    public function tuition(): BelongsTo
+    /** @return BelongsTo<Enrollment, $this> */
+    public function enrollment(): BelongsTo
     {
-        return $this->belongsTo(StudentTuition::class, 'student_tuition_id');
+        return $this->belongsTo(Enrollment::class);
     }
 
     /** @return BelongsTo<PaymentMethod, $this> */

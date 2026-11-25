@@ -5,26 +5,25 @@ namespace App\Modules\Finance\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\Academy\Enrollment;
 use App\Models\Finance\StudentExpense;
-use App\Models\Finance\StudentTuition;
 use App\Modules\Finance\Requests\StudentBillingSearchRequest;
 use App\Modules\Finance\Requests\StudentExpenseCashPaymentRequest;
 use App\Modules\Finance\Requests\StudentExpenseOptionsRequest;
 use App\Modules\Finance\Requests\StudentExpenseStoreRequest;
 use App\Modules\Finance\Requests\StudentPaymentRegisterRequest;
 use App\Modules\Finance\Requests\StudentTuitionCashPaymentRequest;
-use App\Modules\Finance\Services\StudentBill\StudentChargeRegisterService;
-use App\Modules\Finance\Services\StudentBill\StudentEnrollmentBillingService;
-use App\Modules\Finance\Services\StudentBill\StudentPaymentRecordRegisterService;
-use App\Modules\Finance\Services\StudentBill\StudentTuitionPaymentService;
+use App\Modules\Finance\Services\StudentFinance\StudentChargeRegisterService;
+use App\Modules\Finance\Services\StudentFinance\StudentFinanceService;
+use App\Modules\Finance\Services\StudentFinance\StudentPaymentRegisterService;
+use App\Modules\Finance\Services\StudentFinance\StudentTuitionPaymentService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /** HTTP adapter for student billing operations scoped to one enrollment. */
-class StudentEnrollmentBillingController extends Controller
+class StudentFinanceController extends Controller
 {
     /** Return course and batch filter choices from the branch-aware service. */
-    public function registerOptions(StudentPaymentRegisterRequest $request, StudentChargeRegisterService $register): JsonResponse
+    public function registerOptions(StudentPaymentRegisterRequest $request, StudentPaymentRegisterService $register): JsonResponse
     {
         return response()->json(['data' => $register->filterOptions(
             $request->user(),
@@ -33,7 +32,7 @@ class StudentEnrollmentBillingController extends Controller
     }
 
     /** Return one paginated row per recorded tuition or expense payment. */
-    public function register(StudentPaymentRegisterRequest $request, StudentPaymentRecordRegisterService $register): JsonResponse
+    public function register(StudentPaymentRegisterRequest $request, StudentPaymentRegisterService $register): JsonResponse
     {
         return $this->registerResponse($register->index($request->user(), $request->validated()));
     }
@@ -44,6 +43,7 @@ class StudentEnrollmentBillingController extends Controller
         return $this->registerResponse($register->index($request->user(), $request->validated()));
     }
 
+    /** @param LengthAwarePaginator<array-key, array<string, mixed>> $page */
     /** Keep register pagination metadata consistent for payment rows and charge choices. */
     private function registerResponse(LengthAwarePaginator $page): JsonResponse
     {
@@ -58,22 +58,22 @@ class StudentEnrollmentBillingController extends Controller
         ]);
     }
 
-    public function search(StudentBillingSearchRequest $request, StudentEnrollmentBillingService $billing): JsonResponse
+    public function search(StudentBillingSearchRequest $request, StudentFinanceService $billing): JsonResponse
     {
         return response()->json(['data' => $billing->searchStudent($request->validated('student_id'), $request->user())]);
     }
 
-    public function enrollments(string $studentCode, Request $request, StudentEnrollmentBillingService $billing): JsonResponse
+    public function enrollments(string $studentCode, Request $request, StudentFinanceService $billing): JsonResponse
     {
         return response()->json(['data' => $billing->studentEnrollments($studentCode, $request->user())]);
     }
 
-    public function overview(Enrollment $enrollment, Request $request, StudentEnrollmentBillingService $billing): JsonResponse
+    public function overview(Enrollment $enrollment, Request $request, StudentFinanceService $billing): JsonResponse
     {
         return response()->json(['data' => $billing->billingOverview($enrollment, $request->user())]);
     }
 
-    public function tuition(Enrollment $enrollment, Request $request, StudentEnrollmentBillingService $billing): JsonResponse
+    public function tuition(Enrollment $enrollment, Request $request, StudentFinanceService $billing): JsonResponse
     {
         $tuition = $billing->tuition($enrollment, $request->user());
         if ($tuition === null) {
@@ -83,7 +83,7 @@ class StudentEnrollmentBillingController extends Controller
         return response()->json(['data' => $tuition]);
     }
 
-    public function paymentOptions(Enrollment $enrollment, Request $request, StudentEnrollmentBillingService $billing): JsonResponse
+    public function paymentOptions(Enrollment $enrollment, Request $request, StudentFinanceService $billing): JsonResponse
     {
         return response()->json(['data' => $billing->paymentOptions($enrollment, $request->user())]);
     }
@@ -91,18 +91,17 @@ class StudentEnrollmentBillingController extends Controller
     public function storeTuitionPayment(
         StudentTuitionCashPaymentRequest $request,
         Enrollment $enrollment,
-        StudentTuition $tuition,
         StudentTuitionPaymentService $payments,
     ): JsonResponse {
-        $data = $payments->recordEnrollmentCashPayment($enrollment, $tuition, $request->validated(), $request->user());
+        $data = $payments->recordCashPayment($enrollment, $request->validated(), $request->user());
 
         return response()->json([
-            'message' => 'Student tuition cash payment recorded successfully.',
+            'message' => 'Student tuition payment recorded successfully.',
             'data' => $data,
         ], $data['idempotent_replay'] ? 200 : 201);
     }
 
-    public function expenseOptions(StudentExpenseOptionsRequest $request, Enrollment $enrollment, StudentEnrollmentBillingService $billing): JsonResponse
+    public function expenseOptions(StudentExpenseOptionsRequest $request, Enrollment $enrollment, StudentFinanceService $billing): JsonResponse
     {
         return response()->json(['data' => $billing->expenseOptions(
             $enrollment,
@@ -112,20 +111,22 @@ class StudentEnrollmentBillingController extends Controller
         )]);
     }
 
-    public function expenses(Enrollment $enrollment, Request $request, StudentEnrollmentBillingService $billing): JsonResponse
+    public function expenses(Enrollment $enrollment, Request $request, StudentFinanceService $billing): JsonResponse
     {
         return response()->json(['data' => $billing->expenses($enrollment, $request->user())]);
     }
 
-    public function storeExpense(StudentExpenseStoreRequest $request, Enrollment $enrollment, StudentEnrollmentBillingService $billing): JsonResponse
+    public function storeExpense(StudentExpenseStoreRequest $request, Enrollment $enrollment, StudentFinanceService $billing): JsonResponse
     {
+        $data = $billing->createExpense($enrollment, $request->validated(), $request->user());
+
         return response()->json([
-            'message' => 'Student expense issued successfully.',
-            'data' => $billing->createExpense($enrollment, $request->validated(), $request->user()),
-        ], 201);
+            'message' => isset($data['payment']) ? 'Student bill and payment recorded successfully.' : 'Student expense issued successfully.',
+            'data' => $data,
+        ], ($data['idempotent_replay'] ?? false) ? 200 : 201);
     }
 
-    public function showExpense(Enrollment $enrollment, StudentExpense $expense, Request $request, StudentEnrollmentBillingService $billing): JsonResponse
+    public function showExpense(Enrollment $enrollment, StudentExpense $expense, Request $request, StudentFinanceService $billing): JsonResponse
     {
         return response()->json(['data' => $billing->expense($enrollment, $expense, $request->user())]);
     }
@@ -134,17 +135,17 @@ class StudentEnrollmentBillingController extends Controller
         StudentExpenseCashPaymentRequest $request,
         Enrollment $enrollment,
         StudentExpense $expense,
-        StudentEnrollmentBillingService $billing,
+        StudentFinanceService $billing,
     ): JsonResponse {
         $data = $billing->recordExpenseCashPayment($enrollment, $expense, $request->validated(), $request->user());
 
         return response()->json([
-            'message' => 'Student expense cash payment recorded successfully.',
+            'message' => 'Student expense payment recorded successfully.',
             'data' => $data,
         ], $data['idempotent_replay'] ? 200 : 201);
     }
 
-    public function payments(Enrollment $enrollment, Request $request, StudentEnrollmentBillingService $billing): JsonResponse
+    public function payments(Enrollment $enrollment, Request $request, StudentFinanceService $billing): JsonResponse
     {
         return response()->json(['data' => $billing->paymentHistory($enrollment, $request->user())]);
     }

@@ -78,20 +78,20 @@ class FinanceVolumeSeeder extends Seeder
 
             $price = $this->coursePriceForEnrollment($enrollment->course_id, $enrollment->branch_id, $enrollment->enrollment_date);
             $tuitionNumber = 'DEVCORE-TUI-VOL-'.str_pad((string) ($index + 1), 3, '0', STR_PAD_LEFT);
-            $tuition = $this->saveRow('student_tuitions', ['enrollment_id' => $enrollment->id], [
+            $tuition = $this->saveRow('enrollments', ['id' => $enrollment->id], [
                 'course_price_version_id' => $price->id,
                 'tuition_number' => $tuitionNumber,
-                'original_amount' => $price->amount,
-                'waiver_amount' => '0.00',
-                'waiver_reason' => null,
-                'waiver_approved_by' => null,
-                'waiver_approved_at' => null,
-                'issued_on' => '2025-01-15',
-                'due_on' => '2025-12-15',
-                'status' => 'issued',
-                'cancelled_at' => null,
-                'cancellation_reason' => null,
-                'notes' => $this->scenarioNote('FIN-VOL-TUITION-'.str_pad((string) ($index + 1), 3, '0', STR_PAD_LEFT), 'Tuition source amount matches its course price version; payment math is derived from integer cents.'),
+                'tuition_original_amount' => $price->amount,
+                'tuition_waiver_amount' => '0.00',
+                'tuition_waiver_reason' => null,
+                'tuition_waiver_approved_by' => null,
+                'tuition_waiver_approved_at' => null,
+                'tuition_issued_on' => '2025-01-15',
+                'tuition_due_on' => '2025-12-15',
+                'tuition_status' => 'issued',
+                'tuition_cancelled_at' => null,
+                'tuition_cancellation_reason' => null,
+                'tuition_notes' => $this->scenarioNote('FIN-VOL-TUITION-'.str_pad((string) ($index + 1), 3, '0', STR_PAD_LEFT), 'Tuition source amount matches its course price version; payment math is derived from integer cents.'),
             ]);
 
             $amountCents = $this->toCents((string) $price->amount);
@@ -129,7 +129,7 @@ class FinanceVolumeSeeder extends Seeder
     {
         $number = 'DEVCORE-TUIP-VOL-'.str_pad((string) $paymentIndex, 3, '0', STR_PAD_LEFT);
         $this->saveRow('student_tuition_payments', ['payment_number' => $number], [
-            'student_tuition_id' => $tuition->id,
+            'enrollment_id' => $tuition->id,
             'payment_method_id' => $methodId,
             'financial_account_id' => $accountId,
             'amount' => $this->fromCents($paidCents),

@@ -8,7 +8,7 @@ use App\Models\Academy\StudentAcademicException;
 use App\Models\Academy\StudentStageHistory;
 use App\Models\Academy\StudentStageRecord;
 use App\Modules\Academy\Services\Enrollments\StudentEnrollmentService;
-use App\Modules\Finance\Services\StudentBill\StudentFinancialOverviewService;
+use App\Modules\Finance\Services\StudentFinance\StudentFinancialOverviewService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;

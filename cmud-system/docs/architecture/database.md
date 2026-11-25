@@ -1,3 +1,5 @@
+> **Schema revision ? 2026-11-25:** Migration `2026_11_25_000000_move_student_tuition_to_enrollments` supersedes the tuition table descriptions below. `student_tuitions` is removed. Tuition amounts, waiver approval details, issue/due dates, status and cancellation metadata now live on `enrollments` under `tuition_*` fields, plus `tuition_number` and `course_price_version_id`. `student_tuition_payments.enrollment_id` references enrollments directly. Additional expenses and their payments keep the existing structure. Historical tuition IDs and timestamps are retained on enrollment solely for receipt retry compatibility and rollback.
+
 
 database
 ====================

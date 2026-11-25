@@ -1,5 +1,7 @@
 # CMUD ERP — Seed Data Plan
 
+> **2026-11-25 tuition schema update:** Tuition details now live on `enrollments` (`tuition_original_amount`, approved waiver fields, issue/due dates, status and cancellation metadata). `student_tuition_payments.enrollment_id` references the enrollment directly. `student_tuitions` and its model are removed by a data-preserving migration; older counts below describe the historical dataset. CoreFinanceSeeder and FinanceVolumeSeeder update their existing enrollment's tuition fields and retain stable payment numbers. SD-FIN-001?004 retain their original amounts, waivers, confirmed payments and expected dues; no development seeder execution is required for this migration.
+
 > **Status:** Schema inventory and local development dataset verified on 2026-11-12; application workflows remain pending  
 > **Scope:** Development data only  
 > **Method:** Direct Laravel Seeders and explicit records; **no factories**  

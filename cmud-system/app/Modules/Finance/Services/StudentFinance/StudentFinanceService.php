@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Modules\Finance\Services\StudentBill;
+namespace App\Modules\Finance\Services\StudentFinance;
 
 use App\Models\Academy\Enrollment;
 use App\Models\Academy\Student;
@@ -11,7 +11,6 @@ use App\Models\Finance\StudentExpense;
 use App\Models\Finance\StudentExpensePayment;
 use App\Models\Finance\StudentExpensePriceVersion;
 use App\Models\Finance\StudentExpenseType;
-use App\Models\Finance\StudentTuition;
 use App\Models\Finance\StudentTuitionPayment;
 use App\Models\Security\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -24,7 +23,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /** Own enrollment-scoped student billing reads, expense issuance, and cash collection. */
-class StudentEnrollmentBillingService
+class StudentFinanceService
 {
     public function __construct(private readonly StudentFinancialOverviewService $overview) {}
 
@@ -82,7 +81,7 @@ class StudentEnrollmentBillingService
             ? $this->toCents($tuition['original_amount']) : 0;
         $tuitionWaiver = $tuitionAmount > 0 ? $this->toCents($tuition['approved_waiver']) : 0;
         // Payment totals are derived from confirmed ledger rows, never from a stored status label.
-        $tuitionRecord = $enrollment->tuition()->first();
+        $tuitionRecord = $enrollment->hasTuition() ? $enrollment : null;
         $tuitionActive = $tuition !== null && ! $tuition['is_cancelled'];
         $tuitionPaid = ! $tuitionActive || $tuitionRecord === null ? 0 : $this->confirmedTuitionPaid((int) $tuitionRecord->id);
         $activeExpenses = collect($otherBills)->reject(fn (array $bill): bool => $bill['is_cancelled']);
@@ -123,19 +122,19 @@ class StudentEnrollmentBillingService
     public function tuition(Enrollment $enrollment, User $viewer): ?array
     {
         $this->assertEnrollmentAccess($enrollment, $viewer);
-        $tuition = $enrollment->tuition()->with([
-            'payments.paymentMethod:id,name',
-            'payments.financialAccount:id,name',
-            'payments.recorder:id,name',
-        ])->first();
+        $tuition = $enrollment->hasTuition() ? $enrollment->load([
+            'tuitionPayments.paymentMethod:id,name',
+            'tuitionPayments.financialAccount:id,name',
+            'tuitionPayments.recorder:id,name',
+        ]) : null;
         if ($tuition === null) {
             return null;
         }
 
         $paid = $this->confirmedTuitionPaid((int) $tuition->id);
-        $gross = $this->toCents($tuition->original_amount);
-        $waiver = $tuition->getRawOriginal('waiver_approved_at') && $tuition->getRawOriginal('waiver_approved_by')
-            ? $this->toCents($tuition->waiver_amount) : 0;
+        $gross = $this->toCents($tuition->tuition_original_amount);
+        $waiver = $tuition->getRawOriginal('tuition_waiver_approved_at') && $tuition->getRawOriginal('tuition_waiver_approved_by')
+            ? $this->toCents($tuition->tuition_waiver_amount) : 0;
         $cancelled = $this->isCancelled($tuition);
         if ($cancelled) {
             $waiver = 0;
@@ -145,16 +144,16 @@ class StudentEnrollmentBillingService
         return [
             'id' => $tuition->id,
             'tuition_number' => $tuition->tuition_number,
-            'status' => $tuition->getRawOriginal('status'),
+            'status' => $tuition->getRawOriginal('tuition_status'),
             'is_cancelled' => $cancelled,
-            'issued_on' => $tuition->getRawOriginal('issued_on'),
-            'due_on' => $tuition->getRawOriginal('due_on'),
+            'issued_on' => $tuition->getRawOriginal('tuition_issued_on'),
+            'due_on' => $tuition->getRawOriginal('tuition_due_on'),
             'amount' => $this->formatCents($gross),
             'approved_waiver' => $this->formatCents($waiver),
             'payable_amount' => $this->formatCents($payable),
             'paid_amount' => $this->formatCents($paid),
             'outstanding_balance' => $this->formatCents(max(0, $payable - $paid)),
-            'payments' => $tuition->payments->map(fn (StudentTuitionPayment $payment): array => $this->formatPayment($payment))->all(),
+            'payments' => $tuition->tuitionPayments->map(fn (StudentTuitionPayment $payment): array => $this->formatPayment($payment))->all(),
         ];
     }
 
@@ -195,29 +194,73 @@ class StudentEnrollmentBillingService
         ])->all();
     }
 
-    /** Provide branch-compatible active cash accounts for this enrollment's receipts. */
-    /** @return array{cash_accounts: array<int, array<string, mixed>>, payment_methods: array<int, array<string, mixed>>} */
+    /** Provide active payment methods and branch-compatible accounts for this enrollment. */
+    /** @return array{financial_accounts: array<int, array<string, mixed>>, payment_methods: array<int, array<string, mixed>>} */
     public function paymentOptions(Enrollment $enrollment, User $viewer): array
     {
         $this->assertEnrollmentAccess($enrollment, $viewer);
         $enrollment->loadMissing('course');
 
         return [
-            'cash_accounts' => FinancialAccount::query()->where('institute_id', $enrollment->course->institute_id)
-                ->where('account_type', 'cash')->where('is_active', true)
+            'financial_accounts' => FinancialAccount::query()->where('institute_id', $enrollment->course->institute_id)
+                ->where('is_active', true)
                 ->where(fn (Builder $query) => $query->whereNull('branch_id')->orWhere('branch_id', $enrollment->branch_id))
-                ->orderBy('name')->get(['id', 'name', 'code', 'branch_id'])->toArray(),
+                ->orderBy('name')->get(['id', 'name', 'code', 'account_type', 'branch_id'])->toArray(),
             'payment_methods' => PaymentMethod::query()->where('institute_id', $enrollment->course->institute_id)
-                ->where('is_active', true)->whereRaw('LOWER(name) = ?', ['cash'])
-                ->get(['id', 'name'])->toArray(),
+                ->where('is_active', true)->orderBy('name')
+                ->get(['id', 'name', 'requires_transaction_reference', 'requires_sender_phone'])->toArray(),
         ];
+    }
+
+    /** Issue an additional bill, optionally collecting cash in the same transaction.
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    public function createExpense(Enrollment $enrollment, array $data, User $recorder): array
+    {
+        $this->assertEnrollmentAccess($enrollment, $recorder);
+        if (! isset($data['payment'])) {
+            return $this->issueExpense($enrollment, $data, $recorder);
+        }
+
+        return DB::transaction(function () use ($enrollment, $data, $recorder): array {
+            // Lock the enrollment so retries cannot issue the same paid bill twice.
+            Enrollment::query()->whereKey($enrollment->id)->lockForUpdate()->firstOrFail();
+            $number = 'SE-'.Str::upper(substr(hash('sha256', 'enrollment|'.$enrollment->id.'|'.$data['payment']['idempotency_key']), 0, 26));
+            $expense = StudentExpense::query()->where('expense_number', $number)->first();
+            if ($expense === null) {
+                $issued = $this->issueExpense($enrollment, $data, $recorder, $number);
+                $expense = StudentExpense::query()->findOrFail($issued['id']);
+            } else {
+                $this->assertSameExpenseSubmission($expense, $data);
+            }
+            $result = $this->recordExpenseCashPayment($enrollment, $expense, $data['payment'], $recorder);
+
+            return [...$result['expense'], 'payment' => $result['payment'], 'idempotent_replay' => $result['idempotent_replay']];
+        });
+    }
+
+    /** @param array<string, mixed> $data */
+    private function assertSameExpenseSubmission(StudentExpense $expense, array $data): void
+    {
+        $changed = (int) $expense->student_expense_type_id !== (int) $data['student_expense_type_id']
+            || (int) $expense->student_expense_price_version_id !== (int) $data['price_version_id']
+            || (int) $expense->student_stage_record_id !== (int) ($data['student_stage_record_id'] ?? 0)
+            || $this->toThousandths($expense->quantity) !== $this->toThousandths($data['quantity'] ?? '1.000')
+            || (string) ($expense->notes ?? '') !== (string) ($data['notes'] ?? '')
+            || (isset($data['description']) && $expense->description !== $data['description'])
+            || ($expense->getRawOriginal('due_on') ?? null) !== ($data['due_on'] ?? null)
+            || (isset($data['issued_on']) && $expense->getRawOriginal('issued_on') !== Carbon::parse($data['issued_on'])->toDateString());
+        if ($changed) {
+            throw ValidationException::withMessages(['payment.idempotency_key' => 'This request key was already used for another bill.']);
+        }
     }
 
     /** Create an enrollment-linked expense using an approved historical price snapshot. */
     /** @param array<string, mixed> $data
      * @return array<string, mixed>
      */
-    public function createExpense(Enrollment $enrollment, array $data, User $recorder): array
+    private function issueExpense(Enrollment $enrollment, array $data, User $recorder, ?string $expenseNumber = null): array
     {
         $this->assertEnrollmentAccess($enrollment, $recorder);
         $enrollment->loadMissing('course');
@@ -248,7 +291,7 @@ class StudentEnrollmentBillingService
         }
 
         $expense = DB::transaction(fn (): StudentExpense => StudentExpense::query()->create([
-            'expense_number' => 'SE-'.now()->format('Y').'-'.Str::upper((string) Str::ulid()),
+            'expense_number' => $expenseNumber ?? 'SE-'.now()->format('Y').'-'.Str::upper((string) Str::ulid()),
             'student_id' => $enrollment->student_id,
             'enrollment_id' => $enrollment->id,
             'student_stage_record_id' => $stageRecord?->id,
@@ -323,7 +366,14 @@ class StudentEnrollmentBillingService
             $number = $this->paymentNumber('expense', $lockedExpense->id, (string) $data['idempotency_key']);
             $existing = StudentExpensePayment::query()->where('payment_number', $number)->first();
             if ($existing !== null) {
-                $this->assertSameSubmission($existing, $data);
+                $enrollment->loadMissing('course');
+                $expectedMethodId = $data['payment_method_id']
+                    ?? PaymentMethod::query()->where('institute_id', $enrollment->course->institute_id)
+                        ->whereRaw('LOWER(name) = ?', ['cash'])->value('id');
+                $this->assertSameSubmission($existing, [
+                    ...$data,
+                    'payment_method_id' => $expectedMethodId,
+                ]);
 
                 return ['payment_id' => (int) $existing->id, 'idempotent_replay' => true];
             }
@@ -331,14 +381,19 @@ class StudentEnrollmentBillingService
                 throw ValidationException::withMessages(['expense' => 'Payment can only be recorded for an issued expense.']);
             }
 
-            [$method, $account] = $this->cashConfiguration($enrollment, (int) $data['financial_account_id']);
+            [$method, $account] = $this->paymentConfiguration(
+                $enrollment,
+                (int) $data['financial_account_id'],
+                isset($data['payment_method_id']) ? (int) $data['payment_method_id'] : null,
+            );
+            $this->validateMethodRequirements($method, $data);
             $gross = $this->expenseGrossCents($lockedExpense);
             $waiver = $lockedExpense->getRawOriginal('waiver_approved_at') && $lockedExpense->getRawOriginal('waiver_approved_by')
                 ? $this->toCents($lockedExpense->waiver_amount) : 0;
             $paid = $this->toCents($lockedExpense->payments()->where('status', 'confirmed')->sum('amount'));
             $amount = $this->toCents($data['amount']);
-            if ($amount > max(0, $gross - $waiver - $paid)) {
-                throw ValidationException::withMessages(['amount' => 'The cash payment cannot exceed the expense balance.']);
+            if ($amount <= 0 || $amount > max(0, $gross - $waiver - $paid)) {
+                throw ValidationException::withMessages(['amount' => 'The payment cannot exceed the expense balance.']);
             }
 
             $payment = StudentExpensePayment::query()->create([
@@ -349,6 +404,7 @@ class StudentEnrollmentBillingService
                 'amount' => $this->formatCents($amount),
                 'paid_at' => $data['paid_at'] ?? now(),
                 'transaction_reference' => $data['transaction_reference'] ?? null,
+                'payer_phone' => $data['payer_phone'] ?? null,
                 'status' => 'confirmed',
                 'verification_method' => 'manual',
                 'verified_by' => $recorder->getAuthIdentifier(),
@@ -374,8 +430,8 @@ class StudentEnrollmentBillingService
     public function paymentHistory(Enrollment $enrollment, User $viewer): array
     {
         $this->assertEnrollmentAccess($enrollment, $viewer);
-        $tuition = $enrollment->tuition()->with(['payments.paymentMethod:id,name', 'payments.recorder:id,name'])->first();
-        $tuitionPayments = $tuition?->payments->map(fn (StudentTuitionPayment $payment): array => [
+        $tuition = $enrollment->hasTuition() ? $enrollment->load(['tuitionPayments.paymentMethod:id,name', 'tuitionPayments.recorder:id,name']) : null;
+        $tuitionPayments = $tuition?->tuitionPayments->map(fn (StudentTuitionPayment $payment): array => [
             ...$this->formatPayment($payment), 'source' => 'tuition', 'obligation_number' => $tuition->tuition_number,
         ]) ?? collect();
         $expensePayments = StudentExpensePayment::query()->whereHas('expense', fn (Builder $query) => $query
@@ -479,21 +535,39 @@ class StudentEnrollmentBillingService
     }
 
     /** @return array{0: PaymentMethod, 1: FinancialAccount} */
-    private function cashConfiguration(Enrollment $enrollment, int $accountId): array
+    private function paymentConfiguration(Enrollment $enrollment, int $accountId, ?int $methodId): array
     {
         $enrollment->loadMissing('course');
         $account = FinancialAccount::query()->whereKey($accountId)->where('institute_id', $enrollment->course->institute_id)
-            ->where('account_type', 'cash')->where('is_active', true)
+            ->where('is_active', true)
             ->where(fn (Builder $query) => $query->whereNull('branch_id')->orWhere('branch_id', $enrollment->branch_id))->first();
         if ($account === null) {
-            throw ValidationException::withMessages(['financial_account_id' => 'Select an active cash account for this institute and branch.']);
+            throw ValidationException::withMessages(['financial_account_id' => 'Select an active financial account for this institute and branch.']);
         }
-        $method = PaymentMethod::query()->where('institute_id', $enrollment->course->institute_id)->where('is_active', true)->whereRaw('LOWER(name) = ?', ['cash'])->first();
+        $methods = PaymentMethod::query()->where('institute_id', $enrollment->course->institute_id)->where('is_active', true);
+        $method = $methodId !== null
+            ? $methods->whereKey($methodId)->first()
+            : $methods->whereRaw('LOWER(name) = ?', ['cash'])->first();
         if ($method === null) {
-            throw ValidationException::withMessages(['cash_payment' => 'Cash payment is not configured for this institute.']);
+            throw ValidationException::withMessages(['payment_method_id' => 'Select an active payment method for this institute.']);
         }
 
         return [$method, $account];
+    }
+
+    /** @param array<string, mixed> $data */
+    private function validateMethodRequirements(PaymentMethod $method, array $data): void
+    {
+        if ($method->requires_transaction_reference && trim((string) ($data['transaction_reference'] ?? '')) === '') {
+            throw ValidationException::withMessages([
+                'transaction_reference' => 'A transaction reference is required for this payment method.',
+            ]);
+        }
+        if ($method->requires_sender_phone && trim((string) ($data['payer_phone'] ?? '')) === '') {
+            throw ValidationException::withMessages([
+                'payer_phone' => 'A sender phone number is required for this payment method.',
+            ]);
+        }
     }
 
     /** @param HasMany<StudentExpensePriceVersion, StudentExpenseType> $query
@@ -549,7 +623,7 @@ class StudentEnrollmentBillingService
             return 0;
         }
 
-        return $this->toCents(StudentTuitionPayment::query()->where('student_tuition_id', $tuitionId)->where('status', 'confirmed')->sum('amount'));
+        return $this->toCents(StudentTuitionPayment::query()->where('enrollment_id', $tuitionId)->where('status', 'confirmed')->sum('amount'));
     }
 
     private function paymentNumber(string $kind, int $obligationId, string $key): string
@@ -568,7 +642,9 @@ class StudentEnrollmentBillingService
 
         if ($this->toCents($payment->amount) !== $this->toCents($data['amount'])
             || (int) $payment->financial_account_id !== (int) $data['financial_account_id']
+            || (int) $payment->payment_method_id !== (int) ($data['payment_method_id'] ?? 0)
             || (string) ($payment->transaction_reference ?? '') !== (string) ($data['transaction_reference'] ?? '')
+            || (string) ($payment->payer_phone ?? '') !== (string) ($data['payer_phone'] ?? '')
             || (string) ($payment->notes ?? '') !== (string) ($data['notes'] ?? '')
             || $paidAtChanged) {
             throw ValidationException::withMessages(['idempotency_key' => 'This idempotency key has already been used for a different payment.']);
@@ -583,10 +659,12 @@ class StudentEnrollmentBillingService
         return intdiv(($quantityMilli * $unitCents) + 500, 1000);
     }
 
-    private function isCancelled(StudentTuition|StudentExpense $obligation): bool
+    private function isCancelled(Enrollment|StudentExpense $obligation): bool
     {
-        return $obligation->getRawOriginal('cancelled_at') !== null
-            || $obligation->getRawOriginal('status') === 'cancelled';
+        $prefix = $obligation instanceof Enrollment ? 'tuition_' : '';
+
+        return $obligation->getRawOriginal($prefix.'cancelled_at') !== null
+            || $obligation->getRawOriginal($prefix.'status') === 'cancelled';
     }
 
     private function toCents(mixed $value): int

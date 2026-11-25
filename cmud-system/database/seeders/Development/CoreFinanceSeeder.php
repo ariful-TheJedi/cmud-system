@@ -73,27 +73,27 @@ class CoreFinanceSeeder extends Seeder
                 'branch_id' => null,
                 'version_number' => $scenario['version'],
             ]);
-            $tuition = $this->saveRow('student_tuitions', [
-                'enrollment_id' => $this->findId('enrollments', ['enrollment_code' => $scenario['enrollment']]),
+            $tuition = $this->saveRow('enrollments', [
+                'id' => $this->findId('enrollments', ['enrollment_code' => $scenario['enrollment']]),
             ], [
                 'course_price_version_id' => $priceVersionId,
                 'tuition_number' => $scenario['number'],
-                'original_amount' => $scenario['amount'],
-                'waiver_amount' => $scenario['waiver'],
-                'waiver_reason' => $scenario['waiver'] !== '0.00' ? 'Fictional core scenario waiver.' : null,
-                'waiver_approved_by' => $scenario['waiver'] !== '0.00' ? $operatorId : null,
-                'waiver_approved_at' => $scenario['waiver'] !== '0.00' ? self::SEEDED_AT : null,
-                'issued_on' => '2025-01-15',
-                'due_on' => $scenario['due'],
-                'status' => 'issued',
-                'cancelled_at' => null,
-                'cancellation_reason' => null,
-                'notes' => $this->scenarioNote('SD-'.$scenario['key'], 'Amounts are source records; balance behavior is pending.'),
+                'tuition_original_amount' => $scenario['amount'],
+                'tuition_waiver_amount' => $scenario['waiver'],
+                'tuition_waiver_reason' => $scenario['waiver'] !== '0.00' ? 'Fictional core scenario waiver.' : null,
+                'tuition_waiver_approved_by' => $scenario['waiver'] !== '0.00' ? $operatorId : null,
+                'tuition_waiver_approved_at' => $scenario['waiver'] !== '0.00' ? self::SEEDED_AT : null,
+                'tuition_issued_on' => '2025-01-15',
+                'tuition_due_on' => $scenario['due'],
+                'tuition_status' => 'issued',
+                'tuition_cancelled_at' => null,
+                'tuition_cancellation_reason' => null,
+                'tuition_notes' => $this->scenarioNote('SD-'.$scenario['key'], 'Amounts are source records; balance behavior is pending.'),
             ]);
 
             foreach ($scenario['payments'] as $index => [$paymentNumber, $amount]) {
                 $this->saveRow('student_tuition_payments', ['payment_number' => $paymentNumber], [
-                    'student_tuition_id' => $tuition->id,
+                    'enrollment_id' => $tuition->id,
                     'payment_method_id' => $paymentMethods['cash'],
                     'financial_account_id' => $accounts['DEVCORE-CASH-001'],
                     'amount' => $amount,

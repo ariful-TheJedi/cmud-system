@@ -7,7 +7,7 @@ use App\Models\Academy\StudentNotification;
 use App\Modules\Academy\Requests\StudentNotificationRequest;
 use App\Modules\Academy\Services\Communications\StudentNotificationService;
 use App\Modules\Academy\Services\Students\StudentSearchService;
-use App\Modules\Finance\Services\StudentBill\StudentFinancialOverviewService;
+use App\Modules\Finance\Services\StudentFinance\StudentFinancialOverviewService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 

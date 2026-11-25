@@ -2,13 +2,12 @@
 
 namespace Database\Factories\Finance;
 
+use App\Models\Academy\Enrollment;
 use App\Models\Finance\FinancialAccount;
 use App\Models\Finance\PaymentMethod;
-use App\Models\Finance\StudentTuition;
 use App\Models\Finance\StudentTuitionPayment;
+use App\Models\Institute\Institute;
 use App\Models\Security\User;
-use App\Models\Academy\Enrollment;
-use App\Models\Academy\CoursePriceVersion;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -21,54 +20,24 @@ class StudentTuitionPaymentFactory extends Factory
     public function definition(): array
     {
         return [
-            'student_tuition_id' => fn () => StudentTuition::query()->firstOrCreate(
-                ['tuition_number' => 'FACTORY-TUITION'],
-                [
-                    'enrollment_id' => Enrollment::query()->value('id')
-                        ?? Enrollment::query()->create([
-                            'enrollment_code' => 'FACTORY-ENROLLMENT',
-                            'student_id' => \App\Models\Academy\Student::query()->value('id')
-                                ?? \App\Models\Academy\Student::factory()->create()->id,
-                            'course_id' => \App\Models\Academy\Course::query()->value('id')
-                                ?? \App\Models\Academy\Course::query()->create([
-                                    'institute_id' => \App\Models\Institute\Institute::query()->value('id')
-                                        ?? \App\Models\Institute\Institute::query()->create(['code' => 'FACTORY-INSTITUTE', 'name' => 'Factory Institute'])->id,
-                                    'code' => 'FACTORY-COURSE', 'name' => 'Factory Course', 'duration_months' => 12,
-                                    'completion_period_months' => 15, 'is_active' => true,
-                                ])->id,
-                            'branch_id' => \App\Models\Institute\Branch::query()->value('id')
-                                ?? \App\Models\Institute\Branch::query()->create([
-                                    'institute_id' => \App\Models\Institute\Institute::query()->value('id'),
-                                    'code' => 'FACTORY-BRANCH', 'name' => 'Factory Branch',
-                                ])->id,
-                            'enrollment_date' => now()->toDateString(),
-                            'expected_completion_on' => now()->addYear()->toDateString(),
-                            'completion_deadline_on' => now()->addMonths(15)->toDateString(),
-                            'status' => 'active', 'is_active' => true,
-                        ])->id,
-                    'course_price_version_id' => CoursePriceVersion::query()->value('id')
-                        ?? CoursePriceVersion::query()->create([
-                            'course_id' => \App\Models\Academy\Course::query()->value('id'),
-                            'branch_id' => \App\Models\Institute\Branch::query()->value('id'),
-                            'version_number' => 1, 'amount' => 1000,
-                            'effective_from' => now()->toDateString(), 'status' => 'active',
-                        ])->id,
-                    'original_amount' => 1000,
-                    'waiver_amount' => 0,
-                    'issued_on' => now()->toDateString(),
-                    'status' => 'issued',
-                ],
-            )->id,
+            'enrollment_id' => Enrollment::factory()->state([
+                'status' => 'ongoing',
+                'tuition_number' => fake()->unique()->bothify('FACTORY-TUITION-####??'),
+                'tuition_original_amount' => '1000.00',
+                'tuition_waiver_amount' => '0.00',
+                'tuition_issued_on' => now()->toDateString(),
+                'tuition_status' => 'issued',
+            ]),
             'payment_number' => fake()->unique()->bothify('PAY-####??'),
             'payment_method_id' => fn () => PaymentMethod::query()->value('id')
                 ?? PaymentMethod::query()->create([
-                    'institute_id' => \App\Models\Institute\Institute::query()->value('id')
-                        ?? \App\Models\Institute\Institute::query()->create(['code' => 'FACTORY-INSTITUTE', 'name' => 'Factory Institute'])->id,
+                    'institute_id' => Institute::query()->value('id')
+                        ?? Institute::query()->create(['code' => 'FACTORY-INSTITUTE', 'name' => 'Factory Institute'])->id,
                     'code' => 'factory-cash', 'name' => 'Factory Cash',
                 ])->id,
             'financial_account_id' => fn () => FinancialAccount::query()->value('id')
                 ?? FinancialAccount::query()->create([
-                    'institute_id' => \App\Models\Institute\Institute::query()->value('id'),
+                    'institute_id' => Institute::query()->value('id'),
                     'code' => 'FACTORY-CASH', 'name' => 'Factory Cash Account', 'account_type' => 'cash',
                     'opening_balance_as_of' => now(),
                 ])->id,

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Modules\Finance\Services\StudentBill;
+namespace App\Modules\Finance\Services\StudentFinance;
 
 use App\Models\Security\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -10,31 +10,6 @@ use Illuminate\Support\Facades\DB;
 /** Provide a paginated student-charge register limited to the viewer's branch scope. */
 class StudentChargeRegisterService
 {
-    /** Return only course and batch options visible to this account. */
-    public function filterOptions(User $viewer, ?int $courseId = null): array
-    {
-        $courses = DB::table('enrollments as enrollment')
-            ->join('courses as course', 'course.id', '=', 'enrollment.course_id')
-            ->select('course.id', 'course.name')
-            ->distinct()
-            ->orderBy('course.name');
-        $this->applyViewerScope($courses, $viewer);
-
-        $batches = DB::table('enrollments as enrollment')
-            ->join('batches as batch', 'batch.id', '=', 'enrollment.batch_id')
-            ->select('batch.id', 'batch.name')
-            ->whereNotNull('enrollment.batch_id')
-            ->when($courseId !== null, fn (Builder $query) => $query->where('enrollment.course_id', $courseId))
-            ->distinct()
-            ->orderBy('batch.name');
-        $this->applyViewerScope($batches, $viewer);
-
-        return [
-            'courses' => $courses->get()->map(fn (object $row): array => ['id' => (int) $row->id, 'name' => $row->name])->all(),
-            'batches' => $batches->get()->map(fn (object $row): array => ['id' => (int) $row->id, 'name' => $row->name])->all(),
-        ];
-    }
-
     /**
      * @param  array{search?: string|null, course_id?: int|null, batch_id?: int|null, invoice_id?: string|null, per_page?: int|null}  $filters
      * @return LengthAwarePaginator<int, array<string, mixed>>
@@ -57,23 +32,22 @@ class StudentChargeRegisterService
 
     private function tuitionCharges(User $viewer, array $filters): Builder
     {
-        $query = DB::table('student_tuitions as tuition')
-            ->join('enrollments as enrollment', 'enrollment.id', '=', 'tuition.enrollment_id')
+        $query = DB::table('enrollments as enrollment')->whereNotNull('enrollment.tuition_original_amount')
             ->join('students as student', 'student.id', '=', 'enrollment.student_id')
             ->leftJoin('courses as course', 'course.id', '=', 'enrollment.course_id')
             ->leftJoin('batches as batch', 'batch.id', '=', 'enrollment.batch_id')
             ->leftJoin('branches as branch', 'branch.id', '=', 'enrollment.branch_id')
             ->selectRaw("'tuition' as charge_type")
             ->addSelect([
-                'tuition.id as charge_id',
-                'tuition.tuition_number as charge_number',
-                'tuition.issued_on',
-                'tuition.status as obligation_status',
-                'tuition.cancelled_at',
-                'tuition.original_amount as gross_amount',
-                'tuition.waiver_amount',
-                'tuition.waiver_approved_at',
-                'tuition.waiver_approved_by',
+                'enrollment.id as charge_id',
+                'enrollment.tuition_number as charge_number',
+                'enrollment.tuition_issued_on as issued_on',
+                'enrollment.tuition_status as obligation_status',
+                'enrollment.tuition_cancelled_at as cancelled_at',
+                'enrollment.tuition_original_amount as gross_amount',
+                'enrollment.tuition_waiver_amount as waiver_amount',
+                'enrollment.tuition_waiver_approved_at as waiver_approved_at',
+                'enrollment.tuition_waiver_approved_by as waiver_approved_by',
             ])
             ->selectRaw("'Tuition' as expense_type_name, 'Course tuition' as description")
             ->addSelect([
@@ -89,13 +63,13 @@ class StudentChargeRegisterService
             ->selectSub(
                 DB::table('student_tuition_payments as payment')
                     ->selectRaw('COALESCE(SUM(payment.amount), 0)')
-                    ->whereColumn('payment.student_tuition_id', 'tuition.id')
+                    ->whereColumn('payment.enrollment_id', 'enrollment.id')
                     ->where('payment.status', 'confirmed'),
                 'confirmed_paid',
             );
 
         $this->applyViewerScope($query, $viewer);
-        $this->applyRegisterFilters($query, $filters, 'tuition.tuition_number');
+        $this->applyRegisterFilters($query, $filters, 'enrollment.tuition_number');
 
         return $query;
     }
@@ -165,7 +139,8 @@ class StudentChargeRegisterService
             $query->where('course.id', $filters['course_id']);
         }
         if (! empty($filters['batch_id'])) {
-            $query->where('batch.id', $filters['batch_id']);
+            $query->where('batch.id', $filters['batch_id'])
+                ->whereColumn('batch.course_id', 'enrollment.course_id');
         }
         if (($filters['invoice_id'] ?? '') !== '') {
             $invoiceId = trim((string) $filters['invoice_id']);

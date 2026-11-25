@@ -5,7 +5,7 @@ namespace App\Modules\Finance\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\Academy\Enrollment;
 use App\Modules\Academy\Services\Students\StudentSearchService;
-use App\Modules\Finance\Services\StudentBill\StudentFinancialOverviewService;
+use App\Modules\Finance\Services\StudentFinance\StudentFinancialOverviewService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 

@@ -24,6 +24,16 @@ class StudentExpenseStoreRequest extends FormRequest
             'issued_on' => ['sometimes', 'date'],
             'due_on' => ['sometimes', 'nullable', 'date'],
             'notes' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            // Omit payment to issue a bill for later; include it to collect payment atomically.
+            'payment' => ['sometimes', 'required', 'array:amount,financial_account_id,payment_method_id,idempotency_key,paid_at,transaction_reference,payer_phone,notes'],
+            'payment.amount' => ['required_with:payment', 'numeric', 'decimal:0,2', 'gt:0', 'max:9999999999.99'],
+            'payment.financial_account_id' => ['required_with:payment', 'integer', 'exists:financial_accounts,id'],
+            'payment.payment_method_id' => ['sometimes', 'integer', 'exists:payment_methods,id'],
+            'payment.idempotency_key' => ['required_with:payment', 'string', 'max:100'],
+            'payment.paid_at' => ['sometimes', 'date', 'before_or_equal:now'],
+            'payment.transaction_reference' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'payment.payer_phone' => ['sometimes', 'nullable', 'string', 'max:32'],
+            'payment.notes' => ['sometimes', 'nullable', 'string', 'max:2000'],
         ];
     }
 }

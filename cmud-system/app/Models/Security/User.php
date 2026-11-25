@@ -3,6 +3,7 @@
 namespace App\Models\Security;
 
 use App\Models\Academy\CoursePriceVersion;
+use App\Models\Academy\Enrollment;
 use App\Models\Finance\AccountTransfer;
 use App\Models\Finance\InstituteExpense;
 use App\Models\Finance\InstituteExpensePayment;
@@ -12,10 +13,9 @@ use App\Models\Finance\InstituteOtherIncomeBillPayment;
 use App\Models\Finance\StudentExpense;
 use App\Models\Finance\StudentExpensePayment;
 use App\Models\Finance\StudentExpensePriceVersion;
-use App\Models\Finance\StudentTuition;
 use App\Models\Finance\StudentTuitionPayment;
-use App\Models\Institute\StockPriceVersion;
 use App\Models\Institute\Branch;
+use App\Models\Institute\StockPriceVersion;
 use App\Models\Institute\Stuff;
 use App\Models\Institute\StuffAssignment;
 use Database\Factories\Security\UserFactory;
@@ -125,7 +125,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 
     public function approvedTuitionWaivers(): HasMany
     {
-        return $this->hasMany(StudentTuition::class, 'waiver_approved_by');
+        return $this->hasMany(Enrollment::class, 'tuition_waiver_approved_by');
     }
 
     public function verifiedTuitionPayments(): HasMany

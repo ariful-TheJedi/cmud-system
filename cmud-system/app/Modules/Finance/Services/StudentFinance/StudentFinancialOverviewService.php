@@ -1,13 +1,12 @@
 <?php
 
-namespace App\Modules\Finance\Services\StudentBill;
+namespace App\Modules\Finance\Services\StudentFinance;
 
 use App\Models\Academy\Enrollment;
 use App\Models\Academy\Student;
 use App\Models\Academy\StudentStageRecord;
 use App\Models\Finance\StudentExpense;
 use App\Models\Finance\StudentExpensePayment;
-use App\Models\Finance\StudentTuition;
 use App\Models\Finance\StudentTuitionPayment;
 use App\Models\Security\User;
 use Illuminate\Support\Carbon;
@@ -73,7 +72,7 @@ class StudentFinancialOverviewService
             'outstanding_due' => 0,
         ];
 
-        $enrollments = $student->enrollments()->with(['course:id,code,name', 'tuition.payments']);
+        $enrollments = $student->enrollments()->with(['course:id,code,name', 'tuitionPayments']);
         if ($viewer !== null && ! $viewer->is_super_admin) {
             $enrollments->where('branch_id', $viewer->branch_id);
         }
@@ -82,7 +81,7 @@ class StudentFinancialOverviewService
             abort(404, 'Student not found.');
         }
         foreach ($visibleEnrollments as $enrollment) {
-            $tuition = $enrollment->tuition;
+            $tuition = $enrollment->hasTuition() ? $enrollment : null;
             $courseFee = 0;
             $additionalFees = 0;
             $waiver = 0;
@@ -91,17 +90,17 @@ class StudentFinancialOverviewService
             $hasBill = false;
             $overdue = false;
 
-            if ($tuition instanceof StudentTuition && ! $this->isCancelled($tuition)) {
+            if ($tuition instanceof Enrollment && ! $this->isCancelled($tuition)) {
                 $hasBill = true;
-                $courseFee = $this->toCents($tuition->original_amount);
+                $courseFee = $this->toCents($tuition->tuition_original_amount);
                 $waiver = $this->tuitionWaiverCents($tuition);
-                foreach ($tuition->payments as $payment) {
+                foreach ($tuition->tuitionPayments as $payment) {
                     if ($payment->getRawOriginal('status') === 'confirmed') {
                         $paid += $this->toCents($payment->amount);
                     }
                 }
                 $due = max(0, $courseFee - $waiver - $paid);
-                $overdue = $due > 0 && $this->isPastDue($tuition->getRawOriginal('due_on'));
+                $overdue = $due > 0 && $this->isPastDue($tuition->getRawOriginal('tuition_due_on'));
             }
 
             $expenseDue = 0;
@@ -206,9 +205,7 @@ class StudentFinancialOverviewService
             return null;
         }
 
-        $tuition = $enrollment->tuition()
-            ->with(['payments' => fn ($query) => $query->orderByDesc('paid_at'), 'payments.paymentMethod:id,name'])
-            ->first();
+        $tuition = $enrollment->hasTuition() ? $enrollment->load(['tuitionPayments' => fn ($query) => $query->orderByDesc('paid_at'), 'tuitionPayments.paymentMethod:id,name']) : null;
         $expenses = StudentExpense::query()
             ->where(fn ($query) => $query
                 ->where('enrollment_id', $enrollment->id)
@@ -222,16 +219,16 @@ class StudentFinancialOverviewService
             ...$summary,
             'bill' => $tuition ? [
                 'tuition_number' => $tuition->tuition_number,
-                'status' => (string) $tuition->getRawOriginal('status'),
+                'status' => (string) $tuition->getRawOriginal('tuition_status'),
                 'is_cancelled' => $this->isCancelled($tuition),
-                'original_amount' => (string) $tuition->original_amount,
+                'original_amount' => (string) $tuition->tuition_original_amount,
                 'approved_waiver' => $this->formatCents($this->tuitionWaiverCents($tuition)),
                 'payable_amount' => $this->formatCents($this->isCancelled($tuition) ? 0 : max(
                     0,
-                    $this->toCents($tuition->original_amount) - $this->tuitionWaiverCents($tuition),
+                    $this->toCents($tuition->tuition_original_amount) - $this->tuitionWaiverCents($tuition),
                 )),
-                'due_on' => $tuition->getRawOriginal('due_on'),
-                'payments' => $tuition->payments->map(fn (StudentTuitionPayment $payment): array => [
+                'due_on' => $tuition->getRawOriginal('tuition_due_on'),
+                'payments' => $tuition->tuitionPayments->map(fn (StudentTuitionPayment $payment): array => [
                     'payment_number' => $payment->payment_number,
                     'amount' => $this->formatCents($this->toCents($payment->amount)),
                     'paid_at' => Carbon::parse((string) $payment->getRawOriginal('paid_at'))->toIso8601String(),
@@ -318,10 +315,12 @@ class StudentFinancialOverviewService
         ];
     }
 
-    private function isCancelled(StudentTuition|StudentExpense $bill): bool
+    private function isCancelled(Enrollment|StudentExpense $bill): bool
     {
-        return $bill->getRawOriginal('cancelled_at') !== null
-            || $bill->getRawOriginal('status') === 'cancelled';
+        $prefix = $bill instanceof Enrollment ? 'tuition_' : '';
+
+        return $bill->getRawOriginal($prefix.'cancelled_at') !== null
+            || $bill->getRawOriginal($prefix.'status') === 'cancelled';
     }
 
     private function financialStatus(int $paidCents, int $dueCents, bool $overdue): string
@@ -337,12 +336,12 @@ class StudentFinancialOverviewService
         return $paidCents === 0 ? 'unpaid' : 'partial';
     }
 
-    private function tuitionWaiverCents(StudentTuition $tuition): int
+    private function tuitionWaiverCents(Enrollment $tuition): int
     {
-        $waiverApproved = $tuition->getRawOriginal('waiver_approved_by') !== null
-            && $tuition->getRawOriginal('waiver_approved_at') !== null;
+        $waiverApproved = $tuition->getRawOriginal('tuition_waiver_approved_by') !== null
+            && $tuition->getRawOriginal('tuition_waiver_approved_at') !== null;
 
-        return $waiverApproved ? $this->toCents($tuition->waiver_amount) : 0;
+        return $waiverApproved ? $this->toCents($tuition->tuition_waiver_amount) : 0;
     }
 
     private function expenseGrossCents(StudentExpense $expense): int

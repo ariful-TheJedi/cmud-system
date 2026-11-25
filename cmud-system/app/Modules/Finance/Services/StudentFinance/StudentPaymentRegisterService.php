@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Modules\Finance\Services\StudentBill;
+namespace App\Modules\Finance\Services\StudentFinance;
 
 use App\Models\Security\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -8,11 +8,37 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 /** List individual tuition and expense payments while enforcing the viewer's branch scope. */
-class StudentPaymentRecordRegisterService
+class StudentPaymentRegisterService
 {
+    /** @return array{courses: list<array{id: int, name: string}>, batches: list<array{id: int, name: string}>} */
+    public function filterOptions(User $viewer, ?int $courseId = null): array
+    {
+        $courses = DB::table('enrollments as enrollment')
+            ->join('courses as course', 'course.id', '=', 'enrollment.course_id')
+            ->select('course.id', 'course.name')
+            ->distinct()
+            ->orderBy('course.name');
+        $this->applyViewerScope($courses, $viewer);
+
+        $batches = DB::table('enrollments as enrollment')
+            ->join('batches as batch', 'batch.id', '=', 'enrollment.batch_id')
+            ->select('batch.id', 'batch.name')
+            ->whereNotNull('enrollment.batch_id')
+            ->whereColumn('batch.course_id', 'enrollment.course_id')
+            ->when($courseId !== null, fn (Builder $query) => $query->where('batch.course_id', $courseId))
+            ->distinct()
+            ->orderBy('batch.name');
+        $this->applyViewerScope($batches, $viewer);
+
+        return [
+            'courses' => $courses->get()->map(fn (object $row): array => ['id' => (int) $row->id, 'name' => $row->name])->all(),
+            'batches' => $batches->get()->map(fn (object $row): array => ['id' => (int) $row->id, 'name' => $row->name])->all(),
+        ];
+    }
+
     /**
-     * @param  array{search?: string|null, course_id?: int|null, batch_id?: int|null, invoice_id?: string|null, per_page?: int|null}  $filters
-     * @return LengthAwarePaginator<int, array<string, mixed>>
+     * @param  array<string, mixed>  $filters
+     * @return LengthAwarePaginator<array-key, array<string, mixed>>
      */
     public function index(User $viewer, array $filters): LengthAwarePaginator
     {
@@ -30,11 +56,11 @@ class StudentPaymentRecordRegisterService
             ->through(fn (object $row): array => $this->formatRecord($row));
     }
 
+    /** @param array<string, mixed> $filters */
     private function tuitionPayments(User $viewer, array $filters): Builder
     {
         $query = DB::table('student_tuition_payments as payment')
-            ->join('student_tuitions as tuition', 'tuition.id', '=', 'payment.student_tuition_id')
-            ->join('enrollments as enrollment', 'enrollment.id', '=', 'tuition.enrollment_id')
+            ->join('enrollments as enrollment', 'enrollment.id', '=', 'payment.enrollment_id')
             ->join('students as student', 'student.id', '=', 'enrollment.student_id')
             ->leftJoin('courses as course', 'course.id', '=', 'enrollment.course_id')
             ->leftJoin('batches as batch', 'batch.id', '=', 'enrollment.batch_id')
@@ -59,33 +85,17 @@ class StudentPaymentRecordRegisterService
                 'course.name as course_name',
                 'batch.name as batch_name',
                 'branch.name as branch_name',
-                'tuition.id as charge_id',
-                'tuition.tuition_number as charge_number',
-                'tuition.issued_on as charge_issued_on',
+
             ])
-            ->selectRaw("'Tuition' as charge_category, 'Course tuition' as charge_description")
-            ->selectRaw('CASE WHEN tuition.waiver_approved_at IS NOT NULL AND tuition.waiver_approved_by IS NOT NULL THEN CASE WHEN tuition.original_amount > tuition.waiver_amount THEN tuition.original_amount - tuition.waiver_amount ELSE 0 END ELSE tuition.original_amount END as charge_total')
-            ->selectSub(
-                DB::table('student_tuition_payments as prior_payment')
-                    ->selectRaw('COALESCE(SUM(prior_payment.amount), 0)')
-                    ->whereColumn('prior_payment.student_tuition_id', 'tuition.id')
-                    ->where('prior_payment.status', 'confirmed')
-                    ->where(function (Builder $query): void {
-                        $query->whereColumn('prior_payment.paid_at', '<', 'payment.paid_at')
-                            ->orWhere(function (Builder $sameTime): void {
-                                $sameTime->whereColumn('prior_payment.paid_at', '=', 'payment.paid_at')
-                                    ->whereColumn('prior_payment.id', '<=', 'payment.id');
-                            });
-                    }),
-                'paid_to_date',
-            );
+            ->selectRaw("NULL as expense_id, 'Tuition' as category, 'Course tuition payment' as description");
 
         $this->applyViewerScope($query, $viewer);
-        $this->applyFilters($query, $filters, 'tuition.tuition_number');
+        $this->applyFilters($query, $filters);
 
         return $query;
     }
 
+    /** @param array<string, mixed> $filters */
     private function expensePayments(User $viewer, array $filters): Builder
     {
         $query = DB::table('student_other_payments as payment')
@@ -120,55 +130,42 @@ class StudentPaymentRecordRegisterService
                 'course.name as course_name',
                 'batch.name as batch_name',
                 'branch.name as branch_name',
-                'expense.id as charge_id',
-                'expense.expense_number as charge_number',
-                'expense.issued_on as charge_issued_on',
-                'expense_type.name as charge_category',
-                'expense.description as charge_description',
-            ])
-            ->selectRaw('ROUND(CASE WHEN expense.quantity * expense.unit_amount - CASE WHEN expense.waiver_approved_at IS NOT NULL AND expense.waiver_approved_by IS NOT NULL THEN expense.waiver_amount ELSE 0 END < 0 THEN 0 ELSE expense.quantity * expense.unit_amount - CASE WHEN expense.waiver_approved_at IS NOT NULL AND expense.waiver_approved_by IS NOT NULL THEN expense.waiver_amount ELSE 0 END END, 2) as charge_total')
-            ->selectSub(
-                DB::table('student_other_payments as prior_payment')
-                    ->selectRaw('COALESCE(SUM(prior_payment.amount), 0)')
-                    ->whereColumn('prior_payment.student_expense_id', 'expense.id')
-                    ->where('prior_payment.status', 'confirmed')
-                    ->where(function (Builder $query): void {
-                        $query->whereColumn('prior_payment.paid_at', '<', 'payment.paid_at')
-                            ->orWhere(function (Builder $sameTime): void {
-                                $sameTime->whereColumn('prior_payment.paid_at', '=', 'payment.paid_at')
-                                    ->whereColumn('prior_payment.id', '<=', 'payment.id');
-                            });
-                    }),
-                'paid_to_date',
-            );
+                'expense.id as expense_id',
+                'expense_type.name as category',
+                'expense.description as description',
+            ]);
 
         $this->applyViewerScope($query, $viewer);
-        $this->applyFilters($query, $filters, 'expense.expense_number');
+        $this->applyFilters($query, $filters);
 
         return $query;
     }
 
-    private function applyFilters(Builder $query, array $filters, string $chargeNumberColumn): void
+    /** @param array<string, mixed> $filters */
+    private function applyFilters(Builder $query, array $filters): void
     {
         if (($filters['search'] ?? '') !== '') {
             $search = trim((string) $filters['search']);
             $query->where(function (Builder $scope) use ($search): void {
-                $scope->where('student.student_code', 'like', '%'.$search.'%')
-                    ->orWhere('student.full_name', 'like', '%'.$search.'%');
+                $scope->whereRaw('LOWER(student.student_code) LIKE ?', ['%'.mb_strtolower($search).'%'])
+                    ->orWhereRaw('LOWER(student.full_name) LIKE ?', ['%'.mb_strtolower($search).'%']);
             });
         }
         if (! empty($filters['course_id'])) {
             $query->where('course.id', $filters['course_id']);
         }
         if (! empty($filters['batch_id'])) {
-            $query->where('batch.id', $filters['batch_id']);
+            $query->where('batch.id', $filters['batch_id'])
+                ->whereColumn('batch.course_id', 'enrollment.course_id');
+        }
+        if (! empty($filters['student_id'])) {
+            $query->where('student.student_code', trim($filters['student_id']));
+        }
+        if (! empty($filters['source'])) {
+            $query->whereRaw('? = ?', [$filters['source'], $query->from === 'student_tuition_payments as payment' ? 'tuition' : 'expense']);
         }
         if (($filters['invoice_id'] ?? '') !== '') {
-            $invoiceId = trim((string) $filters['invoice_id']);
-            $query->where(function (Builder $scope) use ($invoiceId, $chargeNumberColumn): void {
-                $scope->where($chargeNumberColumn, 'like', '%'.$invoiceId.'%')
-                    ->orWhere('payment.payment_number', 'like', '%'.$invoiceId.'%');
-            });
+            $query->where('payment.payment_number', 'like', '%'.trim($filters['invoice_id']).'%');
         }
     }
 
@@ -186,12 +183,10 @@ class StudentPaymentRecordRegisterService
         $query->where('enrollment.branch_id', $viewer->branch_id);
     }
 
-    /** Format one payment row and its associated charge data for the record list and receipt. */
+    /** Return actual payment data and enrollment context without obligation totals or due calculations. */
+    /** @return array<string, mixed> */
     private function formatRecord(object $row): array
     {
-        $paid = $this->toCents(data_get($row, 'paid_to_date'));
-        $chargeTotal = max(0, $this->toCents(data_get($row, 'charge_total')));
-        $chargeDue = max(0, $chargeTotal - $paid);
         $source = (string) data_get($row, 'payment_source');
         $id = (int) data_get($row, 'payment_id');
 
@@ -218,17 +213,9 @@ class StudentPaymentRecordRegisterService
                 'batch_name' => data_get($row, 'batch_name'),
                 'branch_name' => data_get($row, 'branch_name'),
             ],
-            'charge' => [
-                'id' => (int) data_get($row, 'charge_id'),
-                'kind' => $source,
-                'number' => data_get($row, 'charge_number'),
-                'category' => data_get($row, 'charge_category') ?? 'Other expense',
-                'description' => data_get($row, 'charge_description'),
-                'issued_on' => (string) data_get($row, 'charge_issued_on'),
-                'amount' => number_format($chargeTotal / 100, 2, '.', ''),
-                'paid' => number_format($paid / 100, 2, '.', ''),
-                'due' => number_format($chargeDue / 100, 2, '.', ''),
-            ],
+            'category' => data_get($row, 'category') ?? 'Other payment',
+            'description' => data_get($row, 'description'),
+            'expense_id' => data_get($row, 'expense_id'),
         ];
     }
 

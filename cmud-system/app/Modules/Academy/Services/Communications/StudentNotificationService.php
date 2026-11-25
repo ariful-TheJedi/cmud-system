@@ -7,7 +7,7 @@ use App\Models\Academy\Enrollment;
 use App\Models\Academy\Student;
 use App\Models\Academy\StudentNotification;
 use App\Models\Academy\StudentStageRecord;
-use App\Modules\Finance\Services\StudentBill\StudentFinancialOverviewService;
+use App\Modules\Finance\Services\StudentFinance\StudentFinancialOverviewService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
