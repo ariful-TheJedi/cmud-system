@@ -2,16 +2,13 @@
 
 namespace App\Modules\Finance\Services\StudentBill;
 
-use App\Models\Finance\StudentExpensePayment;
-use App\Models\Finance\StudentTuitionPayment;
 use App\Models\Security\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /** Provide a paginated student-charge register limited to the viewer's branch scope. */
-class StudentPaymentRegisterService
+class StudentChargeRegisterService
 {
     /** Return only course and batch options visible to this account. */
     public function filterOptions(User $viewer, ?int $courseId = null): array
@@ -48,25 +45,14 @@ class StudentPaymentRegisterService
         $expenses = $this->expenseCharges($viewer, $filters);
         $union = $tuition->unionAll($expenses);
 
-        // Paginate the combined query in SQL so a branch with many records does not load everything.
-        $page = DB::query()
+        // Keep outstanding obligations separate from the payment-record register.
+        return DB::query()
             ->fromSub($union, 'student_charges')
             ->orderByDesc('issued_on')
             ->orderByDesc('charge_id')
             ->orderBy('charge_type')
-            ->paginate(min(max((int) ($filters['per_page'] ?? 25), 1), 100));
-        $charges = $page->getCollection()->map(fn (object $row): array => $this->formatRow($row))->values();
-        $payments = $this->paymentsForCharges($charges);
-
-        // Attach payment details in two bulk reads so the print receipt action has server-recorded data without N+1 queries.
-        $page->setCollection($charges->map(function (array $charge) use ($payments): array {
-            $key = $charge['kind'].':'.$charge['id'];
-            $charge['payments'] = $payments[$key] ?? [];
-
-            return $charge;
-        })->values());
-
-        return $page;
+            ->paginate(min(max((int) ($filters['per_page'] ?? 25), 1), 100))
+            ->through(fn (object $row): array => $this->formatRow($row));
     }
 
     private function tuitionCharges(User $viewer, array $filters): Builder
@@ -202,48 +188,6 @@ class StudentPaymentRegisterService
 
             $query->where('enrollment.branch_id', $viewer->branch_id);
         }
-    }
-
-    /** Return receipt-ready payment records for the current page's branch-scoped charges. */
-    private function paymentsForCharges(Collection $charges): array
-    {
-        $tuitionIds = $charges->where('kind', 'tuition')->pluck('id')->all();
-        $expenseIds = $charges->where('kind', 'expense')->pluck('id')->all();
-        $payments = [];
-
-        StudentTuitionPayment::query()
-            ->with(['paymentMethod:id,name', 'recorder:id,name'])
-            ->whereIn('student_tuition_id', $tuitionIds)
-            ->get()
-            ->each(function (StudentTuitionPayment $payment) use (&$payments): void {
-                $payments['tuition:'.$payment->student_tuition_id][] = $this->formatRegisterPayment($payment, 'tuition');
-            });
-
-        StudentExpensePayment::query()
-            ->with(['paymentMethod:id,name', 'recorder:id,name'])
-            ->whereIn('student_expense_id', $expenseIds)
-            ->get()
-            ->each(function (StudentExpensePayment $payment) use (&$payments): void {
-                $payments['expense:'.$payment->student_expense_id][] = $this->formatRegisterPayment($payment, 'expense');
-            });
-
-        return $payments;
-    }
-
-    /** Keep each payment's receipt identity and issuer details sourced from the finance ledger. */
-    private function formatRegisterPayment(StudentTuitionPayment|StudentExpensePayment $payment, string $source): array
-    {
-        return [
-            'id' => (int) $payment->id,
-            'payment_number' => $payment->payment_number,
-            'amount' => (string) $payment->amount,
-            'paid_at' => $payment->paid_at?->toIso8601String(),
-            'status' => $payment->getRawOriginal('status'),
-            'payment_method' => $payment->paymentMethod?->name,
-            'transaction_reference' => $payment->transaction_reference,
-            'recorded_by_name' => $payment->recorder?->name,
-            'source' => $source,
-        ];
     }
 
     /** @return array<string, mixed> */

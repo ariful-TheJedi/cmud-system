@@ -4,7 +4,7 @@ namespace App\Modules\Finance\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-/** Validate filters for the branch-scoped student charge register. */
+/** Validate shared filters for branch-scoped payment-record and charge registers. */
 class StudentPaymentRegisterRequest extends FormRequest
 {
     public function authorize(): bool

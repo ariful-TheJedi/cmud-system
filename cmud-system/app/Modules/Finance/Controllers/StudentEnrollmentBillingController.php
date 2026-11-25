@@ -12,16 +12,19 @@ use App\Modules\Finance\Requests\StudentExpenseOptionsRequest;
 use App\Modules\Finance\Requests\StudentExpenseStoreRequest;
 use App\Modules\Finance\Requests\StudentPaymentRegisterRequest;
 use App\Modules\Finance\Requests\StudentTuitionCashPaymentRequest;
+use App\Modules\Finance\Services\StudentBill\StudentChargeRegisterService;
 use App\Modules\Finance\Services\StudentBill\StudentEnrollmentBillingService;
-use App\Modules\Finance\Services\StudentBill\StudentPaymentRegisterService;
+use App\Modules\Finance\Services\StudentBill\StudentPaymentRecordRegisterService;
 use App\Modules\Finance\Services\StudentBill\StudentTuitionPaymentService;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /** HTTP adapter for student billing operations scoped to one enrollment. */
 class StudentEnrollmentBillingController extends Controller
 {
-    public function registerOptions(StudentPaymentRegisterRequest $request, StudentPaymentRegisterService $register): JsonResponse
+    /** Return course and batch filter choices from the branch-aware service. */
+    public function registerOptions(StudentPaymentRegisterRequest $request, StudentChargeRegisterService $register): JsonResponse
     {
         return response()->json(['data' => $register->filterOptions(
             $request->user(),
@@ -29,10 +32,21 @@ class StudentEnrollmentBillingController extends Controller
         )]);
     }
 
-    public function register(StudentPaymentRegisterRequest $request, StudentPaymentRegisterService $register): JsonResponse
+    /** Return one paginated row per recorded tuition or expense payment. */
+    public function register(StudentPaymentRegisterRequest $request, StudentPaymentRecordRegisterService $register): JsonResponse
     {
-        $page = $register->index($request->user(), $request->validated());
+        return $this->registerResponse($register->index($request->user(), $request->validated()));
+    }
 
+    /** Return charge obligations separately for the cash-payment selection workflow. */
+    public function chargeRegister(StudentPaymentRegisterRequest $request, StudentChargeRegisterService $register): JsonResponse
+    {
+        return $this->registerResponse($register->index($request->user(), $request->validated()));
+    }
+
+    /** Keep register pagination metadata consistent for payment rows and charge choices. */
+    private function registerResponse(LengthAwarePaginator $page): JsonResponse
+    {
         return response()->json([
             'data' => $page->items(),
             'meta' => [

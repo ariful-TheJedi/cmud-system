@@ -47,21 +47,22 @@ it('searches by Student ID and returns only the student enrollments', function (
         ->assertJsonPath('data.enrollments.0.id', $fixture['enrollment']->id);
 });
 
-it('lists student charges in a paginated branch-scoped register', function (): void {
+it('lists charge obligations separately in a paginated branch-scoped register', function (): void {
     $fixture = enrollmentBillingFixture();
     $this->getJson('/api/v1/student-payments')->assertUnauthorized();
+    $this->getJson('/api/v1/student-payment-charges')->assertUnauthorized();
     $this->actingAs($fixture['user'])->postJson("/api/v1/enrollments/{$fixture['enrollment']->id}/expenses", [
         'student_expense_type_id' => $fixture['expenseType']->id,
         'price_version_id' => $fixture['price']->id,
         'quantity' => '2.000',
     ])->assertCreated();
 
-    $this->actingAs($fixture['user'])->getJson('/api/v1/student-payments?per_page=1')
+    $this->actingAs($fixture['user'])->getJson('/api/v1/student-payment-charges?per_page=1')
         ->assertOk()->assertJsonCount(1, 'data')
         ->assertJsonPath('meta.total', 2)
         ->assertJsonPath('meta.last_page', 2)
         ->assertJsonPath('data.0.student.student_code', $fixture['student']->student_code);
-    $allCharges = $this->actingAs($fixture['user'])->getJson('/api/v1/student-payments?per_page=100')
+    $allCharges = $this->actingAs($fixture['user'])->getJson('/api/v1/student-payment-charges?per_page=100')
         ->assertOk()->json('data');
     expect(collect($allCharges)->firstWhere('kind', 'tuition'))
         ->toMatchArray(['amount' => '1000.00', 'payable_amount' => '1000.00', 'outstanding_balance' => '1000.00'])
@@ -84,7 +85,7 @@ it('lists student charges in a paginated branch-scoped register', function (): v
         'branch_id' => $otherBranch->id,
     ]);
 
-    $this->actingAs($otherUser)->getJson('/api/v1/student-payments')
+    $this->actingAs($otherUser)->getJson('/api/v1/student-payment-charges')
         ->assertOk()->assertJsonCount(0, 'data')->assertJsonPath('meta.total', 0);
 
     $superuser = User::query()->create([
@@ -94,7 +95,7 @@ it('lists student charges in a paginated branch-scoped register', function (): v
         'is_active' => true,
         'is_super_admin' => true,
     ]);
-    $this->actingAs($superuser)->getJson('/api/v1/student-payments?search='.$fixture['student']->student_code)
+    $this->actingAs($superuser)->getJson('/api/v1/student-payment-charges?search='.$fixture['student']->student_code)
         ->assertOk()->assertJsonCount(2, 'data')->assertJsonPath('meta.total', 2);
 });
 
@@ -122,33 +123,96 @@ it('provides branch-scoped course and course-dependent batch filters for the cha
         ->assertJsonFragment(['id' => $batch->id, 'name' => $batch->name]);
 
     $this->actingAs($fixture['user'])
-        ->getJson('/api/v1/student-payments?search='.urlencode($fixture['student']->student_code).'&course_id='.$fixture['course']->id.'&batch_id='.$batch->id)
+        ->getJson('/api/v1/student-payment-charges?search='.urlencode($fixture['student']->student_code).'&course_id='.$fixture['course']->id.'&batch_id='.$batch->id)
         ->assertOk()
         ->assertJsonCount(1, 'data')
         ->assertJsonPath('data.0.student.student_code', $fixture['student']->student_code)
         ->assertJsonPath('data.0.enrollment.batch_name', $batch->name);
 });
 
-it('includes payment receipt and issuer details with each branch-scoped charge', function (): void {
+it('lists each payment record separately when one enrollment has multiple payments', function (): void {
     $fixture = enrollmentBillingFixture();
-    $payment = $this->actingAs($fixture['user'])->postJson(
+    $first = $this->actingAs($fixture['user'])->postJson(
         "/api/v1/enrollments/{$fixture['enrollment']->id}/tuition/{$fixture['tuition']->id}/payments",
         [
             'amount' => '125.00',
             'financial_account_id' => $fixture['account']->id,
             'idempotency_key' => 'register-receipt-details-001',
         ],
+    )->assertCreated()->json('data.payment.payment_number');
+    $second = $this->actingAs($fixture['user'])->postJson(
+        "/api/v1/enrollments/{$fixture['enrollment']->id}/tuition/{$fixture['tuition']->id}/payments",
+        [
+            'amount' => '175.00',
+            'financial_account_id' => $fixture['account']->id,
+            'idempotency_key' => 'register-receipt-details-002',
+        ],
+    )->assertCreated()->json('data.payment.payment_number');
+
+    $this->actingAs($fixture['user'])
+        ->getJson('/api/v1/student-payments?search='.$fixture['student']->student_code)
+        ->assertOk()
+        ->assertJsonCount(2, 'data')
+        ->assertJsonPath('meta.total', 2)
+        ->assertJsonPath('data.0.charge.paid', '300.00')
+        ->assertJsonFragment(['payment_number' => $first, 'amount' => '125.00', 'recorded_by_name' => $fixture['user']->name])
+        ->assertJsonFragment(['payment_number' => $second, 'amount' => '175.00', 'recorded_by_name' => $fixture['user']->name]);
+
+    $otherBranch = Branch::query()->create([
+        'institute_id' => $fixture['institute']->id,
+        'code' => 'EBP-'.fake()->unique()->numerify('####'),
+        'name' => 'Payment Records Other Branch',
+        'phone' => '01700000036',
+        'address' => 'Other branch address',
+        'is_active' => true,
+    ]);
+    $otherUser = User::query()->create([
+        'name' => 'Payment Records Other Branch User',
+        'email' => fake()->unique()->safeEmail(),
+        'password' => 'password',
+        'is_active' => true,
+        'branch_id' => $otherBranch->id,
+    ]);
+    $this->actingAs($otherUser)->getJson('/api/v1/student-payments?search='.$fixture['student']->student_code)
+        ->assertOk()->assertJsonCount(0, 'data');
+
+    $superuser = User::query()->create([
+        'name' => 'All Branch Payment Records User',
+        'email' => fake()->unique()->safeEmail(),
+        'password' => 'password',
+        'is_active' => true,
+        'is_super_admin' => true,
+    ]);
+    $this->actingAs($superuser)->getJson('/api/v1/student-payments?search='.$fixture['student']->student_code)
+        ->assertOk()->assertJsonCount(2, 'data');
+});
+
+it('includes expense payments as separate student payment records', function (): void {
+    $fixture = enrollmentBillingFixture();
+    $expense = $this->actingAs($fixture['user'])->postJson(
+        "/api/v1/enrollments/{$fixture['enrollment']->id}/expenses",
+        [
+            'student_expense_type_id' => $fixture['expenseType']->id,
+            'price_version_id' => $fixture['price']->id,
+        ],
+    )->assertCreated()->json('data');
+
+    $this->actingAs($fixture['user'])->postJson(
+        "/api/v1/enrollments/{$fixture['enrollment']->id}/expenses/{$expense['id']}/payments",
+        [
+            'amount' => '75.00',
+            'financial_account_id' => $fixture['account']->id,
+            'idempotency_key' => 'expense-record-register-001',
+        ],
     )->assertCreated();
 
     $this->actingAs($fixture['user'])
         ->getJson('/api/v1/student-payments?search='.$fixture['student']->student_code)
         ->assertOk()
-        ->assertJsonFragment([
-            'payment_number' => $payment->json('data.payment.payment_number'),
-            'amount' => '125.00',
-            'recorded_by_name' => $fixture['user']->name,
-            'source' => 'tuition',
-        ]);
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.source', 'expense')
+        ->assertJsonPath('data.0.amount', '75.00')
+        ->assertJsonPath('data.0.student.student_code', $fixture['student']->student_code);
 });
 
 it('returns enrollment-specific billing totals and records retry-safe expense payments', function (): void {

@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['web', 'auth'])->group(function (): void {
     Route::get('/student-payments/options', [StudentEnrollmentBillingController::class, 'registerOptions'])
         ->name('student-payments.options');
+    Route::get('/student-payment-charges', [StudentEnrollmentBillingController::class, 'chargeRegister'])
+        ->name('student-payment-charges.register');
     Route::get('/student-payments', [StudentEnrollmentBillingController::class, 'register'])
         ->name('student-payments.register');
     Route::get('/students/{studentCode}/enrollments', [StudentEnrollmentBillingController::class, 'enrollments'])
