@@ -111,7 +111,7 @@ it('rejects unsupported bill status values without changing the bill', function 
     $this->assertDatabaseHas('institute_expenses', ['id' => $bill->id, 'status' => 'draft']);
 });
 
-it('forbids another regular user from changing a bill status', function (): void {
+it('allows a branch user to change the status of a bill in their branch', function (): void {
     [$bill] = instituteBillStatusContext();
     $otherUser = User::query()->create([
         'name' => 'Unrelated User',
@@ -124,9 +124,14 @@ it('forbids another regular user from changing a bill status', function (): void
 
     $this->actingAs($otherUser)
         ->patchJson('/api/v1/institute-bills/'.$bill->id.'/status', ['status' => 'approved'])
-        ->assertForbidden();
+        ->assertOk()
+        ->assertJsonPath('data.approval_status', 'approved');
 
-    $this->assertDatabaseHas('institute_expenses', ['id' => $bill->id, 'status' => 'draft']);
+    $this->assertDatabaseHas('institute_expenses', [
+        'id' => $bill->id,
+        'status' => 'approved',
+        'approved_by' => $otherUser->id,
+    ]);
 });
 
 it('allows a super user to change another users bill status', function (): void {

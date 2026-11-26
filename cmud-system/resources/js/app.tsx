@@ -10,6 +10,7 @@ import ExamControl from './pages/academy/students/exam-control';
 import Certificates from './pages/academy/certificates';
 import StudentBill from './pages/billings/student-bill';
 import InstituteBilling from './pages/billings/institute-billing';
+import InstituteOtherBill from './pages/billings/institute-other-bill';
 import StudentRevenue from './pages/finance/student-revenue';
 import InstituteExpenditure from './pages/finance/institute-expenditure';
 import CoursesPage from './pages/academy/management/courses';
@@ -41,6 +42,7 @@ const pages = {
     'finance/institute-expenditure': InstituteExpenditure,
     'billings/student-bill': StudentBill,
     'billings/institute-billing': InstituteBilling,
+    'billings/institute-other-bill': InstituteOtherBill,
     'academy/management/courses': CoursesPage,
     'academy/management/batches': BatchesPage,
     'academy/management/subjects': SubjectsPage,

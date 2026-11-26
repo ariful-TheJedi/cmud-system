@@ -433,6 +433,32 @@ it('does not allow another branch to read a student or pay a different enrollmen
     ])->assertNotFound();
 });
 
+it('requires a branch assignment for billing routes and keeps the super-admin exception', function (): void {
+    $unassignedUser = User::query()->create([
+        'name' => 'Unassigned Billing User',
+        'email' => fake()->unique()->safeEmail(),
+        'password' => 'password',
+        'is_active' => true,
+        'branch_id' => null,
+    ]);
+
+    $this->actingAs($unassignedUser)->getJson('/api/v1/student-payments')->assertForbidden();
+    $this->actingAs($unassignedUser)->get('/billings/student-bill')->assertForbidden();
+    $this->actingAs($unassignedUser)->getJson('/api/v1/institute-bills')->assertForbidden();
+
+    $superAdmin = User::query()->create([
+        'name' => 'Billing Super Admin',
+        'email' => fake()->unique()->safeEmail(),
+        'password' => 'password',
+        'is_active' => true,
+        'is_super_admin' => true,
+        'branch_id' => null,
+    ]);
+
+    $this->actingAs($superAdmin)->getJson('/api/v1/student-payments')->assertOk();
+    $this->actingAs($superAdmin)->get('/billings/student-bill')->assertOk();
+});
+
 it('rejects overpayment and rejects an expense price from another enrollment context', function (): void {
     $fixture = enrollmentBillingFixture();
     $this->actingAs($fixture['user'])->postJson("/api/v1/enrollments/{$fixture['enrollment']->id}/expenses", [

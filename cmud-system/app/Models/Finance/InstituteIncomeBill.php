@@ -13,6 +13,7 @@ class InstituteIncomeBill extends Model
 
     protected $fillable = [
         'university_name',
+        'issuer_name',
         'bill_number',
         'bill_items',
         'total_amount',

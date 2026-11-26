@@ -122,6 +122,7 @@ type EnrollmentFinancialSummary = {
     outstanding_due: string;
     financial_status: string | null;
     bill: TuitionBill | null;
+    unbilled_tuition_payments: EnrollmentPayment[];
     other_bills: OtherBill[];
 };
 
@@ -502,7 +503,7 @@ export function EnrollmentStatusDetails({
                 <div className="flex flex-wrap items-start justify-between gap-2">
                     <SectionHeading
                         title="Financial status"
-                        note="Tuition and enrollment expenses with confirmed payments and balances."
+                        note="Tuition and other-expense payments recorded for this enrollment."
                     />
                     {financial.data?.financial_status && (
                         <StatusBadge status={financial.data.financial_status} />
@@ -543,8 +544,14 @@ export function EnrollmentStatusDetails({
                         <div className="mt-4 border-t border-slate-200 pt-4">
                             <SectionHeading
                                 title="Enrollment payment records"
-                                note="Payment records are grouped under the bill they were applied to."
+                                note="All payment receipts recorded for this enrollment."
                             />
+                            {!financial.data.bill && financial.data.unbilled_tuition_payments.length > 0 && (
+                                <div className="mt-3">
+                                    <p className="mb-2 text-xs font-medium text-slate-700">Tuition payments</p>
+                                    <PaymentList payments={financial.data.unbilled_tuition_payments} />
+                                </div>
+                            )}
                             {financial.data.bill && (
                                 <div className="mt-3">
                                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -594,6 +601,7 @@ export function EnrollmentStatusDetails({
                                 </div>
                             ))}
                             {!financial.data.bill &&
+                                financial.data.unbilled_tuition_payments.length === 0 &&
                                 financial.data.other_bills.length === 0 && (
                                     <EmptyMessage message="No bills or payments are recorded for this enrollment." />
                                 )}

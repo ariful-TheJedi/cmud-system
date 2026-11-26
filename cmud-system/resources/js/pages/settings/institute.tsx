@@ -29,6 +29,7 @@ type Branch = {
     email: string | null;
     address: string;
     is_active: boolean;
+    is_main_branch: boolean;
 };
 type Institute = InstituteOption & {
     phone: string;

@@ -89,12 +89,12 @@ type PaymentRecord = {
 };
 
 type TuitionRecord = {
-    tuition_number: string;
-    original_amount: string;
-    waiver_amount: string;
-    issued_on: string;
+    tuition_number: string | null;
+    original_amount: string | null;
+    waiver_amount: string | null;
+    issued_on: string | null;
     due_on: string | null;
-    status: string;
+    status: string | null;
     payments: PaymentRecord[];
 };
 
@@ -918,9 +918,9 @@ function collectStudentPayments(student: StudentDetails): StudentPaymentRecord[]
 
         return tuition.payments.map((payment) => ({
             ...payment,
-            key: `tuition:${tuition.tuition_number}:${payment.payment_number}`,
+            key: `tuition:${enrollment.id}:${payment.payment_number}`,
             payment_method: payment.payment_method?.name ?? null,
-            source: `${enrollment.course?.name ?? enrollment.enrollment_code} · Tuition ${tuition.tuition_number}`,
+            source: `${enrollment.course?.name ?? enrollment.enrollment_code} · ${tuition.tuition_number ? `Tuition ${tuition.tuition_number}` : 'Tuition payment'}`,
         }));
     });
     const expensePayments = student.expenses.flatMap((expense) =>

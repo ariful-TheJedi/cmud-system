@@ -51,7 +51,7 @@ class InstituteBillService
             $bill->loadMissing([
                 'expenseType:id,institute_id,name',
                 'expenseCategory:id,institute_expense_type_id,name,code',
-                'branch:id,institute_id,name,code',
+                'branch:id,institute_id,name,code,phone,email,address',
                 'department:id,institute_id,name,code',
                 'priceVersion:id,unit_name',
                 'payments' => fn ($query) => $query->orderBy('paid_at')->orderBy('id'),
@@ -369,8 +369,8 @@ class InstituteBillService
             // Lock the row so concurrent decisions cannot leave stale audit metadata behind.
             $bill = InstituteExpense::query()->lockForUpdate()->findOrFail($bill->id);
 
-            // Enforce the business policy here so non-HTTP callers cannot bypass bill ownership.
-            $this->assertBillIssuerOrSuperUser($bill, $updatedBy);
+            // Status actions follow billing branch access: branch staff manage their branch's bills, super admins manage all.
+            $this->assertBillBranchAccess($bill, $updatedBy);
 
             $status = $data['status'];
 
@@ -412,7 +412,7 @@ class InstituteBillService
         return [
             'expenseType:id,institute_id,name',
             'expenseCategory:id,institute_expense_type_id,name,code',
-            'branch:id,institute_id,name,code',
+            'branch:id,institute_id,name,code,phone,email,address',
             'department:id,institute_id,name,code',
             'priceVersion:id,unit_name',
             'payments' => fn ($query) => $query->orderBy('paid_at')->orderBy('id'),
@@ -628,6 +628,9 @@ class InstituteBillService
                 'id' => $bill->branch->id,
                 'name' => $bill->branch->name,
                 'code' => $bill->branch->code,
+                'phone' => $bill->branch->phone,
+                'email' => $bill->branch->email,
+                'address' => $bill->branch->address,
             ] : null,
             'department' => $bill->department ? [
                 'id' => $bill->department->id,

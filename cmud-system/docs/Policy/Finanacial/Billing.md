@@ -9,4 +9,8 @@
 3. the bill iussuer only can change the bill status the bill he generated 
 no other user can except the super admin
 
-4. 
+4. policy for empyee id
+
+5. policy for all recipt id
+
+6. student can't issue a certificate with complete the curse duration 

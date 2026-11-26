@@ -33,6 +33,7 @@ class InstituteUpdateRequest extends FormRequest
             'branches.*.email' => ['nullable', 'email', 'max:255'],
             'branches.*.address' => ['required', 'string'],
             'branches.*.is_active' => ['sometimes', 'boolean'],
+            'branches.*.is_main_branch' => ['sometimes', 'boolean'],
             'deleted_branch_ids' => ['sometimes', 'array'],
             'deleted_branch_ids.*' => ['integer', 'distinct', Rule::exists('branches', 'id')->where('institute_id', $institute->id)],
         ];

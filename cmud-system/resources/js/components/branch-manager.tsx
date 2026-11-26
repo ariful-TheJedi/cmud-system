@@ -19,6 +19,7 @@ type Branch = {
     email: string | null;
     address: string;
     is_active: boolean;
+    is_main_branch: boolean;
 };
 
 type BranchDraft = Omit<Branch, 'id'> & { id?: number };
@@ -41,6 +42,7 @@ function emptyBranch(): BranchDraft {
         email: '',
         address: '',
         is_active: true,
+        is_main_branch: false,
     };
 }
 
@@ -102,6 +104,7 @@ export default function BranchManager({
             email: draft.email?.trim() || null,
             address: draft.address.trim(),
             is_active: draft.is_active,
+            is_main_branch: draft.is_main_branch,
         };
 
         try {
@@ -233,6 +236,11 @@ export default function BranchManager({
                                             <StatusBadge
                                                 active={branch.is_active}
                                             />
+                                            {branch.is_main_branch && (
+                                                <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-[11px] font-semibold text-cyan-800">
+                                                    Main branch
+                                                </span>
+                                            )}
                                         </div>
                                         <p className="mt-1 text-xs text-slate-500">
                                             {branch.code}
@@ -361,6 +369,23 @@ export default function BranchManager({
                                     >
                                         <option value="1">Active</option>
                                         <option value="0">Inactive</option>
+                                    </select>
+                                </label>
+                                <label className="flex items-center justify-between rounded-xl bg-cyan-50 px-4 py-3 text-sm font-medium text-slate-700">
+                                    Main branch
+                                    <select
+                                        value={draft.is_main_branch ? '1' : '0'}
+                                        onChange={(event) =>
+                                            setDraft((current) => ({
+                                                ...current,
+                                                is_main_branch:
+                                                    event.target.value === '1',
+                                            }))
+                                        }
+                                        className="rounded-lg border border-slate-200 bg-white px-3 py-2"
+                                    >
+                                        <option value="0">No</option>
+                                        <option value="1">Yes</option>
                                     </select>
                                 </label>
                                 <div className="flex justify-end gap-2 pt-2">

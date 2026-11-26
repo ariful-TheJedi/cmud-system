@@ -38,6 +38,7 @@ class BranchSettingsTest extends TestCase
                 'email' => 'north@example.test',
                 'address' => 'North address',
                 'is_active' => true,
+                'is_main_branch' => true,
             ]],
         ]);
 
@@ -55,12 +56,14 @@ class BranchSettingsTest extends TestCase
                 'phone' => '01700000033',
                 'email' => 'campus@example.test',
                 'address' => 'Updated north address',
-                'is_active' => false,
+                'is_active' => true,
+                'is_main_branch' => true,
             ]],
         ])
             ->assertOk()
             ->assertJsonPath('data.branches.0.name', 'North Campus')
-            ->assertJsonPath('data.branches.0.is_active', false);
+            ->assertJsonPath('data.branches.0.is_active', true)
+            ->assertJsonPath('data.branches.0.is_main_branch', true);
 
         $this->assertDatabaseHas('institutes', [
             'id' => $institute->id,
@@ -69,7 +72,23 @@ class BranchSettingsTest extends TestCase
         $this->assertDatabaseHas('branches', [
             'id' => $branchId,
             'name' => 'North Campus',
-            'is_active' => false,
+            'is_active' => true,
+            'is_main_branch' => true,
         ]);
+
+        $this->putJson("/api/v1/settings/institutes/{$institute->id}", [
+            'branches' => [[
+                'code' => 'SOUTH-01',
+                'name' => 'South Branch',
+                'phone' => '01700000034',
+                'email' => 'south@example.test',
+                'address' => 'South address',
+                'is_active' => true,
+                'is_main_branch' => true,
+            ]],
+        ])->assertOk();
+
+        $this->assertDatabaseHas('branches', ['id' => $branchId, 'is_main_branch' => false]);
+        $this->assertDatabaseHas('branches', ['code' => 'SOUTH-01', 'is_main_branch' => true]);
     }
 }

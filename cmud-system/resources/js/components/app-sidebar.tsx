@@ -1,5 +1,4 @@
 import {
-    CalendarDays,
     LayoutGrid,
     ClipboardCheck,
     FileCheck2,
@@ -63,11 +62,13 @@ export function AppSidebar() {
                 ]} />
                 <NavMain items={[
                     { title: 'Stuff', href: '/stuff', icon: BriefcaseBusiness },
-                    { title: 'Class routine', href: '/academy/class-routine', icon: CalendarDays },
                 ]} />
-                <NavMain title="Billings" icon={Wallet} items={[
+                <NavMain title="Income" icon={Wallet} items={[
                     { title: 'Student payment', href: '/billings/student-bill', icon: CreditCard },
-                    { title: 'Institute billing', href: '/billings/institute-billing', icon: ReceiptText },
+                    { title: 'Institute Other Bill', href: '/billings/institute-other-bill', icon: ReceiptText },
+                ]} />
+                <NavMain title="Expenditure" icon={Wallet} items={[
+                    { title: 'Institute bill', href: '/billings/institute-billing', icon: ReceiptText },
                 ]} />
                 <NavMain title="Finance" icon={Wallet} items={[
                     { title: 'Student revenue', href: '/finance/student-revenue', icon: CreditCard },

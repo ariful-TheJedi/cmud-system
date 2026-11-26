@@ -368,6 +368,19 @@ class AcademicProgressService
             $reasons[] = 'The enrollment is not active for examination participation.';
         }
 
+        // The batch start and course duration define when an enrollment can sit an exam.
+        $enrollment->loadMissing(['course:id,duration_months', 'batch:id,starts_on']);
+        $durationAnchor = $enrollment->getRawOriginal('starts_on')
+            ?: $enrollment->batch?->getRawOriginal('starts_on');
+        $durationMonths = (int) ($enrollment->course?->duration_months ?? 0);
+        if ($durationAnchor === null) {
+            $reasons[] = 'The batch start date is required to determine course duration completion.';
+        } elseif ($durationMonths > 0
+            && Carbon::parse((string) $durationAnchor)->addMonthsNoOverflow($durationMonths)->isFuture()) {
+            $eligibleOn = Carbon::parse((string) $durationAnchor)->addMonthsNoOverflow($durationMonths)->toDateString();
+            $reasons[] = 'The course duration is not complete. Exam eligibility begins on '.$eligibleOn.'.';
+        }
+
         if ($stageRecord->getRawOriginal('status') !== 'ongoing') {
             $reasons[] = 'The semester must be ongoing before examination participation.';
         }
@@ -377,23 +390,18 @@ class AcademicProgressService
             $reasons[] = 'Previous mandatory stages must be completed first.';
         }
 
-        $fee = $this->stageFeeSummary($stageRecord);
-        $exceptionUsed = $fee['due_cents'] > 0
-            && $this->hasApprovedException($enrollment, $stageRecord, 'exam_fee');
-
-        if ($fee['due_cents'] > 0 && ! $exceptionUsed) {
-            $reasons[] = 'The applicable semester fee must be fully cleared.';
-        }
-
         return [
             'eligible' => $reasons === [],
             'reasons' => $reasons,
-            'fee' => [
-                'payable' => number_format($fee['payable_cents'] / 100, 2, '.', ''),
-                'paid' => number_format($fee['paid_cents'] / 100, 2, '.', ''),
-                'due' => number_format($fee['due_cents'] / 100, 2, '.', ''),
+            'duration' => [
+                'months' => $durationMonths,
+                'starts_on' => $durationAnchor,
+                'eligible_on' => $durationAnchor === null || $durationMonths <= 0
+                    ? null
+                    : Carbon::parse((string) $durationAnchor)->addMonthsNoOverflow($durationMonths)->toDateString(),
+                'completed' => $durationAnchor !== null && ($durationMonths <= 0
+                    || ! Carbon::parse((string) $durationAnchor)->addMonthsNoOverflow($durationMonths)->isFuture()),
             ],
-            'exception_used' => $exceptionUsed,
         ];
     }
 

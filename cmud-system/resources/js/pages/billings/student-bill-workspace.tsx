@@ -13,8 +13,6 @@ import {
 import {
     useCallback,
     useEffect,
-    useMemo,
-    useRef,
     useState,
     type FormEvent,
 } from "react";
@@ -56,115 +54,38 @@ type Payment = {
     paid_at: string;
     status: string;
     payment_method?: string | null;
-    financial_account_id?: number | null;
     transaction_reference?: string | null;
     notes?: string | null;
     recorded_by_name?: string | null;
     source?: "tuition" | "expense";
-    obligation_number?: string | null;
-};
-type Expense = {
-    id: number;
-    expense_number: string;
-    student_expense_type: { id: number; code: string; name: string } | null;
-    description: string;
-    status: string;
-    is_cancelled: boolean;
-    issued_on: string;
-    due_on: string | null;
-    quantity: string;
-    unit_amount: string;
-    amount: string;
-    approved_waiver: string;
-    payable_amount: string;
-    paid_amount: string;
-    outstanding_balance: string;
-    payments: Payment[];
-};
-type Tuition = {
-    id: number;
-    tuition_number: string;
-    status: string;
-    is_cancelled: boolean;
-    issued_on: string;
-    due_on: string | null;
-    amount: string;
-    approved_waiver: string;
-    payable_amount: string;
-    paid_amount: string;
-    outstanding_balance: string;
-    payments: Payment[];
-};
-type FinancialAccount = {
-    id: number;
-    name: string;
-    code: string;
-    account_type: string;
-    branch_id: number | null;
 };
 type ExpenseOption = {
     id: number;
     code: string;
     name: string;
     description?: string | null;
-    prices: {
+    price: {
         id: number;
         amount: string;
-        effective_from: string;
-        effective_to: string | null;
-    }[];
+    };
 };
 type PaymentOptions = {
-    financial_accounts: FinancialAccount[];
     payment_methods: {
         id: number;
+        code: string;
         name: string;
         requires_transaction_reference: boolean;
         requires_sender_phone: boolean;
     }[];
 };
+type BillingOptions = {
+    student: Student;
+    enrollments: (Enrollment & {
+        payment_methods: PaymentOptions["payment_methods"];
+        expense_items: ExpenseOption[];
+    })[];
+};
 type Envelope<T> = { data: T; message?: string };
-type Charge = {
-    id: number;
-    kind: "tuition" | "expense";
-    enrollmentId?: number;
-    number: string;
-    category: string;
-    description: string;
-    issuedOn: string;
-    amount: string;
-    paid: string;
-    due: string;
-    payments: Payment[];
-    cancelled: boolean;
-};
-type RegisterCharge = Charge & {
-    payable_amount: string;
-    student: Student;
-    enrollment: {
-        id: number;
-        enrollment_code: string;
-        course_name: string | null;
-        batch_name: string | null;
-        branch_name: string | null;
-    };
-};
-type RegisterChargeApi = {
-    id: number;
-    kind: "tuition" | "expense";
-    number: string;
-    category: string;
-    description: string;
-    issued_on: string;
-    is_cancelled: boolean;
-    amount: string;
-    payable_amount: string;
-    paid_amount: string;
-    outstanding_balance: string;
-    payments: Payment[];
-    student: Student;
-    enrollment: RegisterCharge["enrollment"];
-};
 type RegisterPaymentRecordApi = {
     id: number;
     payment_key: string;
@@ -175,12 +96,23 @@ type RegisterPaymentRecordApi = {
     status: string;
     payment_method: string | null;
     transaction_reference: string | null;
+    payer_phone?: string | null;
+    notes?: string | null;
     recorded_by_name: string | null;
     category: string;
     description: string;
     expense_id: number | null;
     student: Student;
-    enrollment: RegisterCharge["enrollment"];
+    enrollment: {
+        id: number | null;
+        enrollment_code: string | null;
+        course_name: string | null;
+        batch_name: string | null;
+        branch_name: string | null;
+        branch_phone: string | null;
+        branch_email: string | null;
+        branch_address: string | null;
+    };
 };
 type RegisterPaymentRecord = Payment & {
     payment_key: string;
@@ -188,12 +120,11 @@ type RegisterPaymentRecord = Payment & {
     description: string;
     expense_id: number | null;
     student: Student;
-    enrollment: RegisterCharge["enrollment"];
+    enrollment: RegisterPaymentRecordApi["enrollment"];
 };
 type RegisterFilters = {
     search: string;
-    courseId: string;
-    batchId: string;
+    date: string;
 };
 const field =
     "mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/10";
@@ -246,14 +177,8 @@ const escapeHtml = (value: string) =>
             })[character] ?? character,
     );
 
-function statusLabel(charge: Charge) {
-    if (charge.cancelled) return "Cancelled";
-    if (Number(charge.due) <= 0) return "Paid";
-    return Number(charge.paid) > 0 ? "Partial" : "Unpaid";
-}
-
 /** Use the latest confirmed ledger entry as the receipt shortcut for a charge row. */
-/** Student billing workspace connected to the enrollment-scoped Finance API. */
+/** Student billing workspace connected to the branch-scoped student payment API. */
 export default function StudentBillWorkspace() {
     const { auth, branding } = usePage<{
         auth: Auth;
@@ -266,52 +191,40 @@ export default function StudentBillWorkspace() {
     }>().props;
     const { request } = useApi();
     const [student, setStudent] = useState<Student | null>(null);
-    const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
-    const [enrollmentId, setEnrollmentId] = useState<number | null>(null);
+    const [enrollments, setEnrollments] = useState<BillingOptions["enrollments"]>([]);
+    const [paymentEnrollmentId, setPaymentEnrollmentId] = useState<number | null>(null);
+    const [expenseEnrollmentId, setExpenseEnrollmentId] = useState<number | null>(null);
     const [registerRows, setRegisterRows] = useState<RegisterPaymentRecord[]>(
         [],
     );
-    const [chargeRows, setChargeRows] = useState<RegisterCharge[]>([]);
     const [registerMeta, setRegisterMeta] = useState({
         current_page: 1,
         last_page: 1,
-        per_page: 25,
+        per_page: 15,
         total: 0,
     });
     const [registerPage, setRegisterPage] = useState(1);
     const [registerFilter, setRegisterFilter] = useState("");
-    const [courseIdFilter, setCourseIdFilter] = useState("");
-    const [batchIdFilter, setBatchIdFilter] = useState("");
+    const [registerDateFilter, setRegisterDateFilter] = useState("");
     const [appliedRegisterFilters, setAppliedRegisterFilters] =
         useState<RegisterFilters>({
             search: "",
-            courseId: "",
-            batchId: "",
+            date: "",
         });
-    const [courseOptions, setCourseOptions] = useState<
-        { id: number; name: string }[]
-    >([]);
-    const [batchOptions, setBatchOptions] = useState<
-        { id: number; name: string }[]
-    >([]);
     const [registerRefreshKey, setRegisterRefreshKey] = useState(0);
     const [loadingRegister, setLoadingRegister] = useState(false);
-    const [loadingCharges, setLoadingCharges] = useState(false);
-    const [openingRegisterPayment, setOpeningRegisterPayment] = useState(false);
-    const [tuition, setTuition] = useState<Tuition | null>(null);
-    const [expenses, setExpenses] = useState<Expense[]>([]);
     const [paymentOptions, setPaymentOptions] = useState<PaymentOptions>({
-        financial_accounts: [],
         payment_methods: [],
     });
     const [expenseOptions, setExpenseOptions] = useState<ExpenseOption[]>([]);
     const [loadingEnrollment, setLoadingEnrollment] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [bkashSelected, setBkashSelected] = useState(true);
+    const [paymentStudentId, setPaymentStudentId] = useState("");
+    const [expenseStudentId, setExpenseStudentId] = useState("");
     const [dialog, setDialog] = useState<
-        "payment-type" | "payment" | "expense" | "view" | null
+        "payment" | "expense" | "view" | null
     >(null);
-    const [selectedChargeNumber, setSelectedChargeNumber] = useState("");
-    const [selectedCharge, setSelectedCharge] = useState<Charge | null>(null);
     const [selectedPayment, setSelectedPayment] =
         useState<RegisterPaymentRecord | null>(null);
     const [notice, setNotice] = useState("");
@@ -319,7 +232,6 @@ export default function StudentBillWorkspace() {
     const [paymentForm, setPaymentForm] = useState({
         amount: "",
         paid_on: localDate(),
-        account_id: "",
         method_id: "",
         reference: "",
         payer_phone: "",
@@ -328,126 +240,28 @@ export default function StudentBillWorkspace() {
     const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState("");
     const [expenseForm, setExpenseForm] = useState({
         type_id: "",
-        price_id: "",
-        stage_record_id: "",
-        quantity: "1.000",
-        description: "",
         issued_on: localDate(),
-        due_on: "",
         notes: "",
-        collect_payment: false,
         payment_amount: "",
-        payment_account_id: "",
         payment_method_id: "",
         payment_reference: "",
         payer_phone: "",
     });
-    const expenseOptionsController = useRef<AbortController | null>(null);
-
-    const selectedEnrollment =
-        enrollments.find((item) => item.id === enrollmentId) ?? null;
-    const charges = useMemo<Charge[]>(() => {
-        const tuitionCharge: Charge[] = tuition
-            ? [
-                  {
-                      id: tuition.id,
-                      kind: "tuition",
-                      enrollmentId: enrollmentId ?? undefined,
-                      number: tuition.tuition_number,
-                      category: "Tuition",
-                      description: "Course tuition",
-                      issuedOn: tuition.issued_on,
-                      amount: tuition.payable_amount,
-                      paid: tuition.paid_amount,
-                      due: tuition.outstanding_balance,
-                      payments: tuition.payments,
-                      cancelled: tuition.is_cancelled,
-                  },
-              ]
-            : [];
-        const expenseCharges = expenses.map((expense): Charge => ({
-            id: expense.id,
-            kind: "expense",
-            enrollmentId: enrollmentId ?? undefined,
-            number: expense.expense_number,
-            category: expense.student_expense_type?.name ?? "Other expense",
-            description: expense.description,
-            issuedOn: expense.issued_on,
-            amount: expense.payable_amount,
-            paid: expense.paid_amount,
-            due: expense.outstanding_balance,
-            payments: expense.payments,
-            cancelled: expense.is_cancelled,
-        }));
-        return [...tuitionCharge, ...expenseCharges].sort((left, right) =>
-            right.issuedOn.localeCompare(left.issuedOn),
-        );
-    }, [expenses, tuition]);
-    const currentExpenseOption = expenseOptions.find(
-        (option) => String(option.id) === expenseForm.type_id,
-    );
-    const currentPrice = currentExpenseOption?.prices.find(
-        (price) => String(price.id) === expenseForm.price_id,
-    );
-    const selectedPaymentMethod = paymentOptions.payment_methods.find(
+    const selectedEnrollment = enrollments.find((item) => item.id === paymentEnrollmentId) ?? null;
+    const selectedExpenseEnrollment = enrollments.find((item) => item.id === expenseEnrollmentId) ?? null;
+    const visibleRegisterRows = registerRows;
+    const paymentMethodChoices = paymentOptions.payment_methods;
+    const expensePaymentMethods = selectedExpenseEnrollment?.payment_methods ?? [];
+    const selectedPaymentMethod = paymentMethodChoices.find(
         (method) => String(method.id) === paymentForm.method_id,
     );
-    const selectedExpensePaymentMethod = paymentOptions.payment_methods.find(
+    const selectedExpensePaymentMethod = expensePaymentMethods.find(
         (method) => String(method.id) === expenseForm.payment_method_id,
     );
+    // The current mobile banking choice represents bKash and stays unverified in the UI.
+    const isBkashPayment = selectedExpensePaymentMethod?.code.toLowerCase().endsWith("mobile_banking") === true;
+    const isTuitionBkashPayment = selectedPaymentMethod?.code.toLowerCase().endsWith("mobile_banking") === true;
     const issuerName = auth.user.full_name || auth.user.name;
-    const branchOffice = `CMUD ${selectedEnrollment?.branch?.name ?? auth.user.branch?.name ?? "Institute-wide"} Branch Office`;
-    const instituteContact = [branding?.phone, branding?.email]
-        .filter(Boolean)
-        .join(" · ");
-
-    /** Fetch all records for the selected enrollment; abort stale requests on selection changes. */
-    const loadEnrollment = useCallback(
-        async (id: number, signal: AbortSignal) => {
-            setLoadingEnrollment(true);
-            setError("");
-            setPaymentOptions({ financial_accounts: [], payment_methods: [] });
-            try {
-                const base = `/enrollments/${id}`;
-                const [expenseResponse, optionsResponse, tuitionResponse] =
-                    await Promise.all([
-                        request<Envelope<Expense[]>>(`${base}/expenses`, {
-                            signal,
-                        }),
-                        request<Envelope<PaymentOptions>>(
-                            `${base}/payment-options`,
-                            { signal },
-                        ),
-                        request<Envelope<Tuition>>(`${base}/tuition`, {
-                            signal,
-                        }).catch((reason: unknown) => {
-                            if (
-                                reason instanceof ApiRequestError &&
-                                reason.status === 404
-                            )
-                                return null;
-                            throw reason;
-                        }),
-                    ]);
-                setExpenses(expenseResponse.data.data);
-                setPaymentOptions(optionsResponse.data.data);
-                setTuition(tuitionResponse?.data.data ?? null);
-            } catch (reason) {
-                if (signal.aborted) return;
-                setError(
-                    reason instanceof Error
-                        ? reason.message
-                        : "Unable to load this enrollment’s billing records.",
-                );
-                setExpenses([]);
-                setTuition(null);
-                setPaymentOptions({ financial_accounts: [], payment_methods: [] });
-            } finally {
-                if (!signal.aborted) setLoadingEnrollment(false);
-            }
-        },
-        [request],
-    );
 
     /** Load individual payment records; the service applies branch scope before pagination. */
     const loadRegister = useCallback(
@@ -459,8 +273,7 @@ export default function StudentBillWorkspace() {
                     per_page: String(registerMeta.per_page),
                 });
                 if (filters.search) query.set("search", filters.search);
-                if (filters.courseId) query.set("course_id", filters.courseId);
-                if (filters.batchId) query.set("batch_id", filters.batchId);
+                if (filters.date) query.set("date", filters.date);
                 const response = await request<{
                     data: RegisterPaymentRecordApi[];
                     meta: typeof registerMeta;
@@ -476,6 +289,8 @@ export default function StudentBillWorkspace() {
                         status: row.status,
                         payment_method: row.payment_method,
                         transaction_reference: row.transaction_reference,
+                        payer_phone: row.payer_phone,
+                        notes: row.notes,
                         recorded_by_name: row.recorded_by_name,
                         source: row.source,
                         category: row.category,
@@ -503,58 +318,6 @@ export default function StudentBillWorkspace() {
         [registerMeta.per_page, request],
     );
 
-    /** Keep due obligations available to the payment dialog without mixing them into payment records. */
-    const loadChargeRegister = useCallback(
-        async (signal: AbortSignal, filters: RegisterFilters) => {
-            setLoadingCharges(true);
-            try {
-                const query = new URLSearchParams({
-                    page: "1",
-                    per_page: "100",
-                });
-                if (filters.search) query.set("search", filters.search);
-                if (filters.courseId) query.set("course_id", filters.courseId);
-                if (filters.batchId) query.set("batch_id", filters.batchId);
-                const response = await request<{
-                    data: RegisterChargeApi[];
-                }>(`/student-payment-charges?${query.toString()}`, { signal });
-                if (signal.aborted) return;
-                setChargeRows(
-                    response.data.data.map((row) => ({
-                        id: row.id,
-                        kind: row.kind,
-                        enrollmentId: row.enrollment.id,
-                        number: row.number,
-                        category: row.category,
-                        description: row.description,
-                        issuedOn: row.issued_on,
-                        amount: row.payable_amount,
-                        payable_amount: row.payable_amount,
-                        paid: row.paid_amount,
-                        due: row.outstanding_balance,
-                        payments: row.payments,
-                        cancelled: row.is_cancelled,
-                        student: row.student,
-                        enrollment: row.enrollment,
-                    })),
-                );
-            } catch (reason) {
-                if (!signal.aborted) {
-                    setChargeRows([]);
-                    setError(
-                        getRequestErrorMessage(
-                            reason,
-                            "Unable to load unpaid student charges.",
-                        ),
-                    );
-                }
-            } finally {
-                if (!signal.aborted) setLoadingCharges(false);
-            }
-        },
-        [request],
-    );
-
     useEffect(() => {
         const controller = new AbortController();
         void loadRegister(
@@ -570,242 +333,102 @@ export default function StudentBillWorkspace() {
         registerRefreshKey,
     ]);
 
-    useEffect(() => {
-        const controller = new AbortController();
-        void loadChargeRegister(controller.signal, appliedRegisterFilters);
-        return () => controller.abort();
-    }, [appliedRegisterFilters, loadChargeRegister, registerRefreshKey]);
-
-    useEffect(() => {
-        const controller = new AbortController();
-        void request<
-            Envelope<{
-                courses: { id: number; name: string }[];
-                batches: { id: number; name: string }[];
-            }>
-        >(
-            `/student-payments/options${courseIdFilter ? `?course_id=${courseIdFilter}` : ""}`,
-            { signal: controller.signal },
-        )
-            .then((response) => {
-                if (!controller.signal.aborted) {
-                    if (!courseIdFilter)
-                        setCourseOptions(response.data.data.courses);
-                    setBatchOptions(response.data.data.batches);
-                }
-            })
-            .catch((reason: unknown) => {
-                if (!controller.signal.aborted)
-                    setError(
-                        getRequestErrorMessage(
-                            reason,
-                            "Unable to load course and batch filters.",
-                        ),
-                    );
-            });
-        return () => controller.abort();
-    }, [courseIdFilter, request]);
-
-    useEffect(() => {
-        if (!enrollmentId) {
-            setLoadingEnrollment(false);
-            setExpenses([]);
-            setTuition(null);
-            setPaymentOptions({ financial_accounts: [], payment_methods: [] });
-            return;
+    /** Fetch branch-scoped billing choices from the exact Student ID. */
+    async function lookupBillingOptions(studentCode: string): Promise<BillingOptions | null> {
+        if (!studentCode.trim()) {
+            setError("Enter a Student ID first.");
+            return null;
         }
+        setLoadingEnrollment(true);
         const controller = new AbortController();
-        void loadEnrollment(enrollmentId, controller.signal);
-        return () => controller.abort();
-    }, [enrollmentId, loadEnrollment]);
-
-    useEffect(() => {
-        if (dialog !== "expense") {
-            expenseOptionsController.current?.abort();
-            expenseOptionsController.current = null;
-        }
-    }, [dialog]);
-
-    useEffect(() => () => expenseOptionsController.current?.abort(), []);
-
-    async function refreshSelectedEnrollment() {
-        if (!enrollmentId) return;
-        const controller = new AbortController();
-        await loadEnrollment(enrollmentId, controller.signal);
-    }
-
-    /** Select the owning enrollment from a register row and load only its records. */
-    async function selectRegisterEnrollment(
-        row: Pick<RegisterPaymentRecord, "student" | "enrollment">,
-    ) {
+        setError("");
         try {
-            const response = await request<
-                Envelope<{ student: Student; enrollments: Enrollment[] }>
-            >(
-                `/students/search?student_id=${encodeURIComponent(row.student.student_code)}`,
+            const response = await request<Envelope<BillingOptions>>(
+                `/students/search?student_code=${encodeURIComponent(studentCode.trim())}`,
+                { signal: controller.signal },
             );
-            const visibleEnrollment = response.data.data.enrollments.find(
-                (enrollment) => enrollment.id === row.enrollment.id,
-            );
-            if (!visibleEnrollment) {
-                setError(
-                    "This enrollment is no longer available in your branch scope.",
-                );
-                return false;
-            }
-            setStudent(response.data.data.student);
-            setEnrollments(response.data.data.enrollments);
-            setEnrollmentId(visibleEnrollment.id);
-            return true;
+            const options = response.data.data;
+            setStudent(options.student);
+            setEnrollments(options.enrollments);
+            const selectedPaymentId = paymentEnrollmentId;
+            const selectedExpenseId = expenseEnrollmentId;
+            setPaymentEnrollmentId(options.enrollments.some((item) => item.id === selectedPaymentId) ? selectedPaymentId : null);
+            setExpenseEnrollmentId(options.enrollments.some((item) => item.id === selectedExpenseId) ? selectedExpenseId : null);
+            setPaymentOptions({ payment_methods: options.enrollments.find((item) => item.id === selectedPaymentId)?.payment_methods ?? [] });
+            setExpenseOptions(options.enrollments.find((item) => item.id === selectedExpenseId)?.expense_items ?? []);
+            return options;
         } catch (reason) {
-            setError(
-                getRequestErrorMessage(
-                    reason,
-                    "Unable to open this student enrollment.",
-                ),
-            );
-            return false;
+            setStudent(null);
+            setEnrollments([]);
+            setPaymentEnrollmentId(null);
+            setExpenseEnrollmentId(null);
+            setPaymentOptions({ payment_methods: [] });
+            setExpenseOptions([]);
+            setError(getRequestErrorMessage(reason, "Unable to find this student in your billing branch."));
+            return null;
+        } finally {
+            setLoadingEnrollment(false);
         }
     }
 
-    /** Select a payment's scoped enrollment before opening its details dialog. */
-    async function openRegisterCharge(row: RegisterPaymentRecord) {
-        if (!(await selectRegisterEnrollment(row))) return;
-        setSelectedCharge(null);
+    function choosePaymentEnrollment(id: number) {
+        const selected = enrollments.find((item) => item.id === id);
+        if (!selected) return;
+        setPaymentEnrollmentId(id);
+        setPaymentOptions({ payment_methods: selected.payment_methods });
+        setPaymentForm((current) => ({ ...current, amount: "" }));
+    }
+
+    function chooseExpenseEnrollment(id: number) {
+        const selected = enrollments.find((item) => item.id === id);
+        if (!selected) return;
+        setExpenseEnrollmentId(id);
+        setPaymentOptions({ payment_methods: selected.payment_methods });
+        setExpenseOptions(selected.expense_items);
+        setExpenseForm((current) => ({ ...current, type_id: "", payment_amount: "" }));
+    }
+
+    /** Open payment details directly from a saved receipt row. */
+    function openRegisterCharge(row: RegisterPaymentRecord) {
+        setStudent(row.student);
+        setEnrollments([]);
+        setExpenseOptions([]);
+        setPaymentEnrollmentId(null);
+        setExpenseEnrollmentId(null);
+        setPaymentOptions({ payment_methods: [] });
         setSelectedPayment(row);
         setDialog("view");
     }
 
-    /** Load branch-compatible accounts before opening payment from the register. */
-    async function openRegisterPayment(row: RegisterCharge) {
-        setOpeningRegisterPayment(true);
-        setError("");
-        try {
-            const selected = await selectRegisterEnrollment(row);
-            if (!selected) return;
-            const response = await request<Envelope<PaymentOptions>>(
-                `/enrollments/${row.enrollment.id}/payment-options`,
-            );
-            setPaymentOptions(response.data.data);
-            setSelectedCharge(row);
-            setSelectedPayment(null);
-            setPaymentForm({
-                amount: "",
-                paid_on: localDate(),
-                account_id: "",
-                method_id: "",
-                reference: "",
-                payer_phone: "",
-                notes: "",
-            });
-            setPaymentIdempotencyKey(makeIdempotencyKey());
-            setDialog("payment");
-        } catch (reason) {
-            setError(
-                getRequestErrorMessage(
-                    reason,
-                    "Unable to load payment accounts for this enrollment.",
-                ),
-            );
-        } finally {
-            setOpeningRegisterPayment(false);
-        }
-    }
-
     async function openExpenseDialog() {
-        if (!enrollmentId) return;
-        expenseOptionsController.current?.abort();
-        const controller = new AbortController();
-        expenseOptionsController.current = controller;
         setDialog("expense");
+        setExpenseStudentId(student?.student_code ?? "");
+        setExpenseEnrollmentId(null);
+        setExpenseOptions([]);
+        setPaymentOptions({ payment_methods: [] });
         setExpenseForm({
             type_id: "",
-            price_id: "",
-            stage_record_id: "",
-            quantity: "1.000",
-            description: "",
             issued_on: localDate(),
-            due_on: "",
             notes: "",
-            collect_payment: false,
             payment_amount: "",
-            payment_account_id: "",
             payment_method_id: "",
             payment_reference: "",
             payer_phone: "",
         });
+        setBkashSelected(true);
         setPaymentIdempotencyKey(makeIdempotencyKey());
-        setExpenseOptions([]);
         setError("");
-        try {
-            const response = await request<Envelope<ExpenseOption[]>>(
-                `/enrollments/${enrollmentId}/expenses/options?issued_on=${localDate()}`,
-                { signal: controller.signal },
-            );
-            if (!controller.signal.aborted) {
-                setExpenseOptions(response.data.data);
-            }
-        } catch (reason) {
-            if (!controller.signal.aborted) {
-                setError(
-                    getRequestErrorMessage(
-                        reason,
-                        "Unable to load approved expense prices.",
-                    ),
-                );
-            }
-        }
     }
 
-    async function updateExpenseOptions(
-        issuedOn: string,
-        stageRecordId = expenseForm.stage_record_id,
-    ) {
-        if (!enrollmentId) return;
-        expenseOptionsController.current?.abort();
-        const controller = new AbortController();
-        expenseOptionsController.current = controller;
-        setExpenseOptions([]);
-        setExpenseForm((current) => ({
-            ...current,
-            issued_on: issuedOn,
-            stage_record_id: stageRecordId,
-            type_id: "",
-            price_id: "",
-        }));
-        try {
-            const query = new URLSearchParams({ issued_on: issuedOn });
-            if (stageRecordId) {
-                query.set("student_stage_record_id", stageRecordId);
-            }
-            const response = await request<Envelope<ExpenseOption[]>>(
-                `/enrollments/${enrollmentId}/expenses/options?${query.toString()}`,
-                { signal: controller.signal },
-            );
-            if (!controller.signal.aborted) {
-                setExpenseOptions(response.data.data);
-            }
-        } catch (reason) {
-            if (!controller.signal.aborted) {
-                setError(
-                    getRequestErrorMessage(
-                        reason,
-                        "Unable to load approved expense prices.",
-                    ),
-                );
-            }
-        }
-    }
-
-    function openPayment(charge?: Charge) {
-        setSelectedCharge(charge ?? null);
+    function openPayment() {
         setSelectedPayment(null);
-        setSelectedChargeNumber(charge?.number ?? "");
+        setPaymentEnrollmentId(null);
+        setPaymentOptions({ payment_methods: [] });
         setPaymentIdempotencyKey(makeIdempotencyKey());
+        setPaymentStudentId(student?.student_code ?? "");
         setPaymentForm({
             amount: "",
             paid_on: localDate(),
-            account_id: "",
             method_id: "",
             reference: "",
             payer_phone: "",
@@ -817,21 +440,17 @@ export default function StudentBillWorkspace() {
 
     async function submitPayment(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        const charge =
-            selectedCharge ??
-            charges.find((item) => item.number === selectedChargeNumber);
-        const targetEnrollmentId = charge?.enrollmentId ?? enrollmentId;
-        if (!charge || !targetEnrollmentId) {
-            setError("Select a tuition or expense charge.");
+        if (!student || !paymentEnrollmentId) {
+            setError("Find the student and choose an enrollment before submitting.");
             return;
         }
         setSaving(true);
         setError("");
         try {
-            // One request key makes transport retries safe without duplicating the receipt.
             const payload = {
+                student_id: paymentStudentId.trim(),
+                enrollment_id: paymentEnrollmentId,
                 amount: paymentForm.amount,
-                financial_account_id: Number(paymentForm.account_id),
                 payment_method_id: Number(paymentForm.method_id),
                 idempotency_key: paymentIdempotencyKey,
                 paid_at: paymentForm.paid_on,
@@ -839,13 +458,10 @@ export default function StudentBillWorkspace() {
                 payer_phone: paymentForm.payer_phone || null,
                 notes: paymentForm.notes || null,
             };
-            const path =
-                charge.kind === "tuition"
-                    ? `/enrollments/${targetEnrollmentId}/tuition/payments`
-                    : `/enrollments/${targetEnrollmentId}/expenses/${charge.id}/payments`;
-            const response = await request<
-                Envelope<{ idempotent_replay?: boolean }>
-            >(path, { method: "POST", data: payload });
+            const response = await request<Envelope<{ idempotent_replay?: boolean }>>(
+                "/student-payments/tuition",
+                { method: "POST", data: payload },
+            );
             setDialog(null);
             setNotice(
                 response.status === 200 || response.data.data.idempotent_replay
@@ -853,8 +469,7 @@ export default function StudentBillWorkspace() {
                     : "Payment recorded successfully.",
             );
             setRegisterRefreshKey((current) => current + 1);
-            const controller = new AbortController();
-            await loadEnrollment(targetEnrollmentId, controller.signal);
+            void lookupBillingOptions(paymentStudentId);
         } catch (reason) {
             setError(
                 getRequestErrorMessage(
@@ -869,58 +484,36 @@ export default function StudentBillWorkspace() {
 
     async function submitExpense(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        if (!enrollmentId) return;
+        if (!student || !expenseEnrollmentId) {
+            setError("Find the student and choose an enrollment before submitting.");
+            return;
+        }
         setSaving(true);
         setError("");
         try {
             const data = {
+                student_id: expenseStudentId.trim(),
+                enrollment_id: expenseEnrollmentId,
                 student_expense_type_id: Number(expenseForm.type_id),
-                price_version_id: Number(expenseForm.price_id),
-                student_stage_record_id: expenseForm.stage_record_id
-                    ? Number(expenseForm.stage_record_id)
-                    : null,
-                quantity: expenseForm.quantity,
-                description: expenseForm.description || undefined,
-                issued_on: expenseForm.issued_on,
-                due_on: expenseForm.due_on || null,
+                amount: expenseForm.payment_amount,
+                payment_method_id: Number(expenseForm.payment_method_id),
+                idempotency_key: paymentIdempotencyKey,
+                paid_at: expenseForm.issued_on,
+                transaction_reference: expenseForm.payment_reference || null,
+                payer_phone: expenseForm.payer_phone || null,
                 notes: expenseForm.notes || null,
-                ...(expenseForm.collect_payment
-                    ? {
-                          payment: {
-                              amount: expenseForm.payment_amount,
-                              financial_account_id: Number(
-                                  expenseForm.payment_account_id,
-                              ),
-                              payment_method_id: Number(
-                                  expenseForm.payment_method_id,
-                              ),
-                              idempotency_key: paymentIdempotencyKey,
-                              paid_at: localDate(),
-                              transaction_reference:
-                                  expenseForm.payment_reference || null,
-                              payer_phone: expenseForm.payer_phone || null,
-                              notes: expenseForm.notes || null,
-                          },
-                      }
-                    : {}),
             };
-            const response = await request<
-                Envelope<Expense & { payment?: Payment }>
-            >(
-                `/enrollments/${enrollmentId}/expenses`,
-                {
-                    method: "POST",
-                    data,
-                },
+            const response = await request<Envelope<{ idempotent_replay?: boolean }>>(
+                "/student-payments/other-expenses", { method: "POST", data },
             );
             setDialog(null);
             setNotice(
-                response.data.data.payment
-                    ? "Student bill and payment recorded successfully."
-                    : "Student expense issued successfully.",
+                response.data.data.idempotent_replay
+                    ? "This bill and payment were already recorded."
+                    : "Student bill and payment recorded successfully.",
             );
             setRegisterRefreshKey((current) => current + 1);
-            await refreshSelectedEnrollment();
+            void lookupBillingOptions(expenseStudentId);
         } catch (reason) {
             setError(
                 getRequestErrorMessage(
@@ -940,6 +533,9 @@ export default function StudentBillWorkspace() {
             courseName: string | null;
             batchName: string | null;
             branchName: string | null;
+            branchPhone: string | null;
+            branchEmail: string | null;
+            branchAddress: string | null;
         },
     ) {
         // The receipt uses the recorded issuer and server-issued receipt number from the API.
@@ -954,6 +550,7 @@ export default function StudentBillWorkspace() {
             ["Receipt number", payment.payment_number],
             ["Payment date", dateTimeLabel(payment.paid_at)],
             ["Payment method", payment.payment_method ?? "Cash"],
+            ["Verification status", payment.status],
             ["Issued by", payment.recorded_by_name ?? issuerName],
             ...(payment.transaction_reference
                 ? [["Transaction reference", payment.transaction_reference]]
@@ -976,13 +573,16 @@ export default function StudentBillWorkspace() {
             registerContext?.batchName ?? selectedEnrollment?.batch?.name;
         const receiptBranchOffice = registerContext?.branchName
             ? `CMUD ${registerContext.branchName} Branch Office`
-            : branchOffice;
+            : `CMUD ${auth.user.branch?.name ?? "Branch"} Office`;
+        const branchContact = [registerContext?.branchAddress, registerContext?.branchPhone, registerContext?.branchEmail]
+            .filter(Boolean)
+            .map((value) => escapeHtml(value));
 
         printWindow.document.open();
         printWindow.document
             .write(`<!doctype html><html><head><meta charset="utf-8"><title>Payment receipt ${escapeHtml(payment.payment_number)}</title><style>
             *{box-sizing:border-box}body{margin:0;color:#111827;font:12px Arial,sans-serif}.receipt{width:100%;padding:32px 40px}.header{display:flex;justify-content:space-between;gap:24px;border-bottom:2px solid #17375c;padding-bottom:18px}.brand img{display:block;width:auto;height:48px;max-width:190px;object-fit:contain;object-position:left}.brand p{margin:5px 0 0;color:#64748b;font-size:11px}.header-title{text-align:right}.header-title h1{margin:0;color:#17375c;font-size:22px}.header-title p{margin:5px 0 0;color:#64748b;font-size:10px;font-weight:bold;letter-spacing:.16em;text-transform:uppercase}.content{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:24px}.label{margin:0 0 8px;color:#64748b;font-size:10px;font-weight:bold;letter-spacing:.14em;text-transform:uppercase}.student-name{margin:0;font-size:15px;font-weight:bold}.student-extra{margin:5px 0 0;color:#475569;font-size:11px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin:0;padding:13px;border:1px solid #e2e8f0;border-radius:6px}.meta dt{color:#64748b;font-size:9px}.meta dd{margin:3px 0 0;font-size:11px;font-weight:bold;overflow-wrap:anywhere}.items{margin-top:26px}.items-heading{display:flex;justify-content:space-between;align-items:end;margin-bottom:8px}.items-heading h2{margin:0;font-size:14px}.items-heading span{color:#64748b;font-size:10px}table{width:100%;border-collapse:collapse;font-size:11px}th{border-top:1px solid #cbd5e1;border-bottom:1px solid #cbd5e1;background:#f8fafc;padding:9px 10px;text-align:left}td{border-bottom:1px solid #e2e8f0;padding:12px 10px}th:last-child,td:last-child{text-align:right}.signatures{display:flex;justify-content:space-between;gap:48px;margin-top:58px}.signature-block{width:220px;text-align:center}.signature-name{min-height:16px;font-size:11px;font-weight:bold}.signature-line{margin-top:28px;border-top:1px solid #94a3b8;padding-top:7px;color:#475569;font-size:10px}.footer{margin-top:28px;border-top:1px solid #e2e8f0;padding-top:9px;color:#64748b;font-size:9px;text-align:center}@page{size:A4;margin:14mm}@media print{.receipt{padding:0}.header,.content,.items,table,.signatures,.footer{break-inside:avoid}}
-            </style></head><body><main class="receipt"><header class="header"><div class="brand"><img src="${logoUrl}" alt="${escapeHtml(branding?.name ?? "CMUD")} logo"><p>${escapeHtml(receiptBranchOffice)}</p>${instituteContact ? `<p>${escapeHtml(instituteContact)}</p>` : ""}</div><div class="header-title"><h1>PAYMENT RECEIPT</h1><p>Student payment record</p></div></header><section class="content"><div><h2 class="label">Student</h2><p class="student-name">${escapeHtml(receiptStudent?.full_name ?? "Student")}</p><p class="student-extra">Student ID: ${escapeHtml(receiptStudent?.student_code ?? "")}</p><p class="student-extra">Course: ${escapeHtml(receiptCourseName ?? "—")}</p><p class="student-extra">Batch: ${escapeHtml(receiptBatchName ?? "—")}</p></div><dl class="meta">${receiptMetadata}</dl></section><section class="items"><div class="items-heading"><h2>${escapeHtml(payment.description)}</h2><span>Currency: BDT</span></div><table><thead><tr><th>#</th><th>Payment detail</th><th>Amount received</th></tr></thead><tbody><tr><td>1</td><td>${escapeHtml(payment.category)} payment</td><td>${escapeHtml(money(payment.amount))}</td></tr></tbody></table></section><section class="signatures"><div class="signature-block"><div class="signature-name">${escapeHtml(issuer)}</div><div class="signature-line">Issued by / Signature</div></div><div class="signature-block"><div class="signature-name">${escapeHtml(receiptStudent?.full_name ?? "Student")}</div><div class="signature-line">Received by / Student signature</div></div></section></main><script>window.addEventListener('load',function(){window.focus();window.print();});window.addEventListener('afterprint',function(){window.close();});</script></body></html>`);
+            </style></head><body><main class="receipt"><header class="header"><div class="brand"><img src="${logoUrl}" alt="${escapeHtml(branding?.name ?? "CMUD")} logo"><p>${escapeHtml(receiptBranchOffice)}</p>${branchContact.map((value) => `<p>${value}</p>`).join("")}</div><div class="header-title"><h1>PAYMENT RECEIPT</h1><p>Student payment record</p></div></header><section class="content"><div><h2 class="label">Student</h2><p class="student-name">${escapeHtml(receiptStudent?.full_name ?? "Student")}</p><p class="student-extra">Student ID: ${escapeHtml(receiptStudent?.student_code ?? "")}</p><p class="student-extra">Course: ${escapeHtml(receiptCourseName ?? "—")}</p><p class="student-extra">Batch: ${escapeHtml(receiptBatchName ?? "—")}</p></div><dl class="meta">${receiptMetadata}</dl></section><section class="items"><div class="items-heading"><h2>${escapeHtml(payment.description)}</h2><span>Currency: BDT</span></div><table><thead><tr><th>#</th><th>Payment detail</th><th>Amount received</th></tr></thead><tbody><tr><td>1</td><td>${escapeHtml(payment.category)} payment</td><td>${escapeHtml(money(payment.amount))}</td></tr></tbody></table></section><section class="signatures"><div class="signature-block"><div class="signature-name">${escapeHtml(issuer)}</div><div class="signature-line">Issued by / Signature</div></div></section></main><script>window.addEventListener('load',function(){window.focus();window.print();});window.addEventListener('afterprint',function(){window.close();});</script></body></html>`);
         printWindow.document.close();
     }
 
@@ -1014,43 +614,17 @@ export default function StudentBillWorkspace() {
                         <div className="flex flex-wrap gap-2">
                             <button
                                 type="button"
-                                onClick={() => void openExpenseDialog()}
-                                disabled={!enrollmentId || loadingEnrollment}
-                                className="inline-flex items-center gap-2 rounded-xl border border-white/30 px-4 py-3 text-sm font-semibold text-white hover:bg-white/10 disabled:opacity-50"
+                                onClick={() => openPayment()}
+                                className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-[#17375C] hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                                <Plus size={17} /> Add other bill
+                                <CreditCard size={17} /> Create tuition payment
                             </button>
                             <button
                                 type="button"
-                                onClick={() => {
-                                    if (enrollmentId) {
-                                        setDialog("payment-type");
-                                        return;
-                                    }
-                                    const firstDueCharge = chargeRows.find(
-                                        (charge) =>
-                                            !charge.cancelled &&
-                                            Number(charge.due) > 0,
-                                    );
-                                    if (firstDueCharge)
-                                        void openRegisterPayment(
-                                            firstDueCharge,
-                                        );
-                                }}
-                                disabled={
-                                    loadingCharges ||
-                                    openingRegisterPayment ||
-                                    (enrollmentId
-                                        ? loadingEnrollment
-                                        : !chargeRows.some(
-                                              (charge) =>
-                                                  !charge.cancelled &&
-                                                  Number(charge.due) > 0,
-                                          ))
-                                }
-                                className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-[#17375C] hover:bg-cyan-50 disabled:opacity-50"
+                                onClick={() => void openExpenseDialog()}
+                                className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-[#17375C] hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                                <CreditCard size={17} /> Add student payment
+                                <Plus size={17} /> Create student other bill
                             </button>
                         </div>
                     </header>
@@ -1077,48 +651,11 @@ export default function StudentBillWorkspace() {
                                     Find billing records
                                 </h2>
                                 <p className="mt-1 text-xs text-slate-500">
-                                    Choose a course to load its batches, then
-                                    press Search to filter by course, batch,
-                                    student ID, or name.
+                                    Search billing records by student and payment date.
                                 </p>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setRegisterPage(1);
-                                        setAppliedRegisterFilters({
-                                            search: registerFilter.trim(),
-                                            courseId: courseIdFilter,
-                                            batchId: batchIdFilter,
-                                        });
-                                    }}
-                                    className={primary}
-                                >
-                                    <Search size={16} />
-                                    Search
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setRegisterFilter("");
-                                        setCourseIdFilter("");
-                                        setBatchIdFilter("");
-                                        setBatchOptions([]);
-                                        setRegisterPage(1);
-                                        setAppliedRegisterFilters({
-                                            search: "",
-                                            courseId: "",
-                                            batchId: "",
-                                        });
-                                    }}
-                                    className="rounded-lg px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-                                >
-                                    Clear filters
-                                </button>
-                            </div>
                         </div>
-                        <div className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="grid items-end gap-4 sm:grid-cols-[minmax(0,1fr)_220px_auto]">
                             <label className="block text-xs font-medium text-slate-600">
                                 Student ID or name
                                 <span className="relative mt-1.5 block">
@@ -1132,7 +669,6 @@ export default function StudentBillWorkspace() {
                                             setRegisterFilter(
                                                 event.target.value,
                                             );
-                                            setRegisterPage(1);
                                         }}
                                         placeholder="Search student by ID or name"
                                         className={`${field} mt-0 pl-9`}
@@ -1140,51 +676,27 @@ export default function StudentBillWorkspace() {
                                 </span>
                             </label>
                             <label className="block text-xs font-medium text-slate-600">
-                                Course
-                                <select
-                                    value={courseIdFilter}
-                                    onChange={(event) => {
-                                        const selectedCourseId =
-                                            event.target.value;
-                                        setCourseIdFilter(selectedCourseId);
-                                        setBatchIdFilter("");
-                                        setBatchOptions([]);
-                                        setRegisterPage(1);
-                                    }}
+                                Payment date
+                                <input
+                                    type="date"
+                                    value={registerDateFilter}
+                                    onChange={(event) => setRegisterDateFilter(event.target.value)}
                                     className={field}
-                                >
-                                    <option value="">All courses</option>
-                                    {courseOptions.map((course) => (
-                                        <option
-                                            key={course.id}
-                                            value={course.id}
-                                        >
-                                            {course.name}
-                                        </option>
-                                    ))}
-                                </select>
+                                />
                             </label>
-                            <label className="block text-xs font-medium text-slate-600">
-                                Batch
-                                <select
-                                    value={batchIdFilter}
-                                    onChange={(event) => {
-                                        const selectedBatchId =
-                                            event.target.value;
-                                        setBatchIdFilter(selectedBatchId);
-                                        setRegisterPage(1);
-                                    }}
-                                    disabled={!courseIdFilter}
-                                    className={field}
-                                >
-                                    <option value="">All batches</option>
-                                    {batchOptions.map((batch) => (
-                                        <option key={batch.id} value={batch.id}>
-                                            {batch.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setRegisterPage(1);
+                                    setAppliedRegisterFilters({
+                                        search: registerFilter.trim(),
+                                        date: registerDateFilter,
+                                    });
+                                }}
+                                className={primary}
+                            >
+                                <Search size={16} /> Search
+                            </button>
                         </div>
                     </section>
                     <section
@@ -1208,24 +720,6 @@ export default function StudentBillWorkspace() {
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">
-                                {registerFilter && (
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setRegisterFilter("");
-                                            setRegisterPage(1);
-                                            setAppliedRegisterFilters(
-                                                (filters) => ({
-                                                    ...filters,
-                                                    search: "",
-                                                }),
-                                            );
-                                        }}
-                                        className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                                    >
-                                        Clear student search
-                                    </button>
-                                )}
                                 {loadingRegister && (
                                     <LoaderCircle
                                         size={18}
@@ -1257,7 +751,7 @@ export default function StudentBillWorkspace() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {registerRows.map((record) => (
+                                    {visibleRegisterRows.map((record) => (
                                         <tr key={record.payment_key}>
                                             <td className="px-5 py-4 font-mono text-xs whitespace-nowrap text-[#17375C]">
                                                 {record.payment_number}
@@ -1298,56 +792,40 @@ export default function StudentBillWorkspace() {
                                                 <div className="flex gap-2">
                                                     <button
                                                         type="button"
-                                                        onClick={() =>
-                                                            void openRegisterCharge(
-                                                                record,
-                                                            )
-                                                        }
+                                                        onClick={() => openRegisterCharge(record)}
                                                         aria-label={`View payment ${record.payment_number}`}
                                                         title="View payment"
                                                         className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
                                                     >
                                                         <Eye size={16} />
                                                     </button>
-                                                    {record.status ===
-                                                        "confirmed" && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                printReceipt(
-                                                                    record,
-                                                                    {
-                                                                        student:
-                                                                            record.student,
-                                                                        courseName:
-                                                                            record
-                                                                                .enrollment
-                                                                                .course_name,
-                                                                        batchName:
-                                                                            record
-                                                                                .enrollment
-                                                                                .batch_name,
-                                                                        branchName:
-                                                                            record
-                                                                                .enrollment
-                                                                                .branch_name,
-                                                                    },
-                                                                )
-                                                            }
-                                                            aria-label={`Print payment receipt ${record.payment_number}`}
-                                                            title="Print payment receipt"
-                                                            className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
-                                                        >
-                                                            <Printer
-                                                                size={16}
-                                                            />
-                                                        </button>
-                                                    )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            printReceipt(
+                                                                record,
+                                                                {
+                                                                    student: record.student,
+                                                                    courseName: record.enrollment.course_name,
+                                                                    batchName: record.enrollment.batch_name,
+                                                                    branchName: record.enrollment.branch_name,
+                                                                    branchPhone: record.enrollment.branch_phone,
+                                                                    branchEmail: record.enrollment.branch_email,
+                                                                    branchAddress: record.enrollment.branch_address,
+                                                                },
+                                                            )
+                                                        }
+                                                        aria-label={`Print payment receipt ${record.payment_number}`}
+                                                        title="Print payment receipt"
+                                                        className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
+                                                    >
+                                                        <Printer size={16} />
+                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
                                     ))}
-                                    {!registerRows.length && (
+                                    {!visibleRegisterRows.length && (
                                         <tr>
                                             <td
                                                 colSpan={7}
@@ -1417,148 +895,64 @@ export default function StudentBillWorkspace() {
                 >
                     <DialogHeader>
                         <DialogTitle>
-                            {dialog === "payment-type"
-                                ? "Choose payment type"
-                                : dialog === "payment"
+                            {dialog === "payment"
                                 ? "Record student payment"
                                 : dialog === "expense"
-                                  ? "Issue student expense"
+                                  ? "Create bill & payment"
                                   : selectedPayment
                                     ? "Payment record details"
                                     : "Charge details"}
                         </DialogTitle>
                         <DialogDescription>
-                            {dialog === "payment-type"
-                                ? "Choose tuition payment or create an other-bill payment for the selected student."
-                                : dialog === "payment"
-                                ? "Record a payment against the selected enrollment charge."
+                            {dialog === "payment"
+                                ? "Record a tuition payment for a student in your billing branch."
                                 : dialog === "expense"
-                                  ? "Issue an approved expense price against this enrollment."
+                                  ? "Create an other student bill and record its payment together."
                                   : selectedPayment
                                     ? "Review this payment record and its linked charge."
                                     : "Review the selected student charge."}
                         </DialogDescription>
                     </DialogHeader>
-                    {dialog === "payment-type" && (
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            <button
-                                type="button"
-                                disabled={
-                                    !charges.some(
-                                        (charge) =>
-                                            charge.kind === "tuition" &&
-                                            !charge.cancelled &&
-                                            Number(charge.due) > 0,
-                                    )
-                                }
-                                onClick={() => {
-                                    const tuitionCharge = charges.find(
-                                        (charge) =>
-                                            charge.kind === "tuition" &&
-                                            !charge.cancelled &&
-                                            Number(charge.due) > 0,
-                                    );
-                                    if (tuitionCharge) openPayment(tuitionCharge);
-                                }}
-                                className="rounded-xl border border-slate-200 p-4 text-left hover:border-teal-600 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                <span className="block font-semibold text-[#17375C]">
-                                    Student tuition payment
-                                </span>
-                                <span className="mt-1 block text-xs text-slate-500">
-                                    Record a payment against issued tuition.
-                                </span>
-                            </button>
-                            <button
-                                type="button"
-                                disabled={!enrollmentId || loadingEnrollment}
-                                onClick={() => void openExpenseDialog()}
-                                className="rounded-xl border border-slate-200 p-4 text-left hover:border-teal-600 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                <span className="block font-semibold text-[#17375C]">
-                                    Student other bill payment
-                                </span>
-                                <span className="mt-1 block text-xs text-slate-500">
-                                    Create an other bill and collect now or
-                                    record it for later payment.
-                                </span>
-                            </button>
-                        </div>
-                    )}
                     {dialog === "payment" && (
                         <form onSubmit={submitPayment} className="space-y-4">
-                            {!selectedCharge && (
-                                <label className="block text-xs font-medium text-slate-600">
-                                    Student charge
-                                    <select
-                                        required
-                                        value={selectedChargeNumber}
-                                        onChange={(event) =>
-                                            setSelectedChargeNumber(
-                                                event.target.value,
-                                            )
-                                        }
-                                        className={field}
-                                    >
-                                        <option value="">
-                                            Choose a charge
-                                        </option>
-                                        {charges
-                                            .filter(
-                                                (charge) =>
-                                                    !charge.cancelled &&
-                                                    Number(charge.due) > 0,
-                                            )
-                                            .map((charge) => (
-                                                <option
-                                                    key={`${charge.kind}-${charge.id}`}
-                                                    value={charge.number}
-                                                >
-                                                    {charge.category} ·{" "}
-                                                    {charge.description} · Due{" "}
-                                                    {money(charge.due)}
-                                                </option>
-                                            ))}
+                            <label className="block text-xs font-medium text-slate-600">
+                                Student ID
+                                <input
+                                    required
+                                    value={paymentStudentId}
+                                    onChange={(event) => setPaymentStudentId(event.target.value)}
+                                    placeholder="Enter student ID"
+                                    className={field}
+                                />
+                                <button type="button" disabled={loadingEnrollment || !paymentStudentId.trim()} onClick={() => void lookupBillingOptions(paymentStudentId)} className="mt-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50">
+                                    {loadingEnrollment ? "Checking student…" : "Find student"}
+                                </button>
+                            </label>
+                            {student && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{student.full_name} · {student.student_code}</p>}
+                            {enrollments.length > 0 && (
+                                <label className="block text-xs font-medium text-slate-600">Enrollment
+                                    <select required value={paymentEnrollmentId ?? ""} onChange={(event) => choosePaymentEnrollment(Number(event.target.value))} className={field}>
+                                        <option value="">Choose an enrollment</option>
+                                        {enrollments.map((item) => <option key={item.id} value={item.id}>{item.course?.name ?? item.enrollment_code} · {item.branch?.name} · {item.enrollment_code}</option>)}
                                     </select>
                                 </label>
                             )}
-                            {selectedCharge && (
-                                <div className="space-y-1 rounded-xl bg-slate-50 p-4">
-                                    <p className="font-semibold text-[#17375C]">
-                                        {student?.full_name}
-                                    </p>
-                                    <p className="text-xs text-slate-500">
-                                        {selectedCharge.number} ·{" "}
-                                        {selectedCharge.description}
-                                    </p>
-                                    <p className="pt-2 text-sm">
-                                        Charge: {money(selectedCharge.amount)} ·
-                                        Due:{" "}
-                                        <strong>
-                                            {money(selectedCharge.due)}
-                                        </strong>
-                                    </p>
-                                </div>
-                            )}
+                            {student && enrollments.length === 0 && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">No running enrollments are available for this student in your branch.</p>}
                             <div className="grid gap-4 sm:grid-cols-2">
-                                <label className="block text-xs font-medium text-slate-600">
-                                    Payment amount (BDT)
-                                    <input
-                                        required
-                                        type="number"
-                                        min="0.01"
-                                        max={selectedCharge?.due}
-                                        step="0.01"
-                                        value={paymentForm.amount}
-                                        onChange={(event) =>
-                                            setPaymentForm({
-                                                ...paymentForm,
-                                                amount: event.target.value,
-                                            })
-                                        }
-                                        className={field}
-                                    />
-                                </label>
+                                {!isTuitionBkashPayment && (
+                                    <label className="block text-xs font-medium text-slate-600">
+                                        Payment amount (BDT)
+                                        <input
+                                            required
+                                            type="number"
+                                            min="0.01"
+                                            step="0.01"
+                                            value={paymentForm.amount}
+                                            onChange={(event) => setPaymentForm({ ...paymentForm, amount: event.target.value })}
+                                            className={field}
+                                        />
+                                    </label>
+                                )}
                                 <label className="block text-xs font-medium text-slate-600">
                                     Payment date
                                     <input
@@ -1581,20 +975,21 @@ export default function StudentBillWorkspace() {
                                 <select
                                     required
                                     value={paymentForm.method_id}
-                                    onChange={(event) =>
+                                    onChange={(event) => {
                                         setPaymentForm({
                                             ...paymentForm,
                                             method_id: event.target.value,
                                             reference: "",
                                             payer_phone: "",
-                                        })
-                                    }
+                                        });
+                                        setBkashSelected(true);
+                                    }}
                                     className={field}
                                 >
                                     <option value="">
                                         Select a payment method
                                     </option>
-                                    {paymentOptions.payment_methods.map(
+                                    {paymentMethodChoices.map(
                                         (method) => (
                                             <option
                                                 key={method.id}
@@ -1606,58 +1001,77 @@ export default function StudentBillWorkspace() {
                                     )}
                                 </select>
                             </label>
-                            <label className="block text-xs font-medium text-slate-600">
-                                Deposit account
-                                <select
-                                    required
-                                    value={paymentForm.account_id}
-                                    onChange={(event) =>
-                                        setPaymentForm({
-                                            ...paymentForm,
-                                            account_id: event.target.value,
-                                        })
-                                    }
-                                    className={field}
-                                >
-                                    <option value="">
-                                        Select an account
-                                    </option>
-                                    {paymentOptions.financial_accounts.map(
-                                        (account) => (
-                                            <option
-                                                key={account.id}
-                                                value={account.id}
+                            {isTuitionBkashPayment && (
+                                <div className="space-y-3 rounded-xl border border-pink-200 bg-pink-50/70 p-4">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                                            <input
+                                                type="checkbox"
+                                                checked={bkashSelected}
+                                                onChange={(event) => setBkashSelected(event.target.checked)}
+                                                className="rounded border-slate-300 text-pink-600"
+                                            />
+                                            bKash
+                                        </label>
+                                        <div className="flex items-center gap-2">
+                                            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
+                                                Unverified
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setNotice("Verification API integration will be added later.")}
+                                                className="rounded-md border border-pink-200 bg-white px-2 py-1 text-[11px] font-semibold text-pink-700 hover:bg-pink-100"
                                             >
-                                                {account.name}
-                                                {` · ${account.account_type.replaceAll("_", " ")}`}
-                                                {account.branch_id === null
-                                                    ? " · Institute account"
-                                                    : ""}
-                                            </option>
-                                        ),
-                                    )}
-                                </select>
-                            </label>
-                            <label className="block text-xs font-medium text-slate-600">
-                                Transaction / reference
-                                <input
-                                    required={
-                                        selectedPaymentMethod?.requires_transaction_reference ??
-                                        false
-                                    }
-                                    value={paymentForm.reference}
-                                    onChange={(event) =>
-                                        setPaymentForm({
-                                            ...paymentForm,
-                                            reference: event.target.value,
-                                        })
-                                    }
-                                    className={field}
-                                />
-                            </label>
-                            {selectedPaymentMethod?.requires_sender_phone && (
+                                                Request verification
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <label className="block text-xs font-medium text-slate-600">
+                                        Payment amount (BDT)
+                                        <input
+                                            required
+                                            type="number"
+                                            min="0.01"
+                                            step="0.01"
+                                            value={paymentForm.amount}
+                                            onChange={(event) => setPaymentForm({ ...paymentForm, amount: event.target.value })}
+                                            className={field}
+                                        />
+                                    </label>
+                                    <label className="block text-xs font-medium text-slate-600">
+                                        Transaction ID
+                                        <input
+                                            required
+                                            value={paymentForm.reference}
+                                            onChange={(event) => setPaymentForm({ ...paymentForm, reference: event.target.value })}
+                                            className={field}
+                                        />
+                                    </label>
+                                    <label className="block text-xs font-medium text-slate-600">
+                                        Payer phone number
+                                        <input
+                                            required
+                                            type="tel"
+                                            value={paymentForm.payer_phone}
+                                            onChange={(event) => setPaymentForm({ ...paymentForm, payer_phone: event.target.value })}
+                                            className={field}
+                                        />
+                                    </label>
+                                </div>
+                            )}
+                            {!isTuitionBkashPayment && (
                                 <label className="block text-xs font-medium text-slate-600">
-                                    Sender phone
+                                    Transaction / reference
+                                    <input
+                                        value={paymentForm.reference}
+                                        onChange={(event) => setPaymentForm({ ...paymentForm, reference: event.target.value })}
+                                        className={field}
+                                    />
+                                </label>
+                            )}
+                            {!isTuitionBkashPayment && selectedPaymentMethod?.requires_sender_phone && (
+                                <label className="block text-xs font-medium text-slate-600">
+                                Payer phone number
                                     <input
                                         required
                                         type="tel"
@@ -1686,12 +1100,6 @@ export default function StudentBillWorkspace() {
                                     className={`${field} h-auto py-3`}
                                 />
                             </label>
-                            {!paymentOptions.financial_accounts.length && (
-                                <p className="text-sm text-amber-700">
-                                    No active financial account is configured for
-                                    this enrollment.
-                                </p>
-                            )}
                             {!paymentOptions.payment_methods.length && (
                                 <p className="text-sm text-amber-700">
                                     No active payment method is configured for
@@ -1719,8 +1127,8 @@ export default function StudentBillWorkspace() {
                                     type="submit"
                                     disabled={
                                         saving ||
-                                        !paymentOptions.financial_accounts.length ||
-                                        !paymentOptions.payment_methods.length
+                                        !student || !paymentEnrollmentId || !paymentOptions.payment_methods.length || !paymentForm.amount || !paymentForm.method_id ||
+                                        (isTuitionBkashPayment && !bkashSelected)
                                     }
                                     className={primary}
                                 >
@@ -1740,355 +1148,166 @@ export default function StudentBillWorkspace() {
                     {dialog === "expense" && (
                         <form onSubmit={submitExpense} className="space-y-4">
                             <label className="block text-xs font-medium text-slate-600">
-                                Charge for stage (optional)
-                                <select
-                                    value={expenseForm.stage_record_id}
-                                    onChange={(event) =>
-                                        void updateExpenseOptions(
-                                            expenseForm.issued_on,
-                                            event.target.value,
-                                        )
-                                    }
+                                Student ID
+                                <input
+                                    required
+                                    value={expenseStudentId}
+                                    onChange={(event) => setExpenseStudentId(event.target.value)}
+                                    placeholder="Enter student ID"
                                     className={field}
-                                >
-                                    <option value="">Entire enrollment</option>
-                                    {(
-                                        selectedEnrollment?.stage_records ?? []
-                                    ).map((stage) => (
-                                        <option key={stage.id} value={stage.id}>
-                                            {stage.course_stage?.name ??
-                                                "Course stage"}{" "}
-                                            · {stage.status}
-                                        </option>
-                                    ))}
-                                </select>
+                                />
+                                <button type="button" disabled={loadingEnrollment || !expenseStudentId.trim()} onClick={() => void lookupBillingOptions(expenseStudentId)} className="mt-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50">
+                                    {loadingEnrollment ? "Checking student…" : "Find student"}
+                                </button>
                             </label>
+                            {student && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{student.full_name} · {student.student_code}</p>}
+                            {enrollments.length > 0 && (
+                                <label className="block text-xs font-medium text-slate-600">Enrollment
+                                    <select required value={expenseEnrollmentId ?? ""} onChange={(event) => chooseExpenseEnrollment(Number(event.target.value))} className={field}>
+                                        <option value="">Choose an enrollment</option>
+                                        {enrollments.map((item) => <option key={item.id} value={item.id}>{item.course?.name ?? item.enrollment_code} · {item.branch?.name}</option>)}
+                                    </select>
+                                </label>
+                            )}
+                            {student && enrollments.length === 0 && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">No running enrollments are available for this student in your branch.</p>}
                             <label className="block text-xs font-medium text-slate-600">
-                                Expense type
+                                Other expense item
                                 <select
                                     required
                                     value={expenseForm.type_id}
                                     onChange={(event) => {
                                         const typeId = event.target.value;
-                                        const option = expenseOptions.find(
-                                            (item) =>
-                                                String(item.id) === typeId,
-                                        );
+                                        const option = expenseOptions.find((item) => String(item.id) === typeId);
+                                        const price = option?.price;
                                         setExpenseForm({
                                             ...expenseForm,
                                             type_id: typeId,
-                                            price_id: option?.prices[0]
-                                                ? String(option.prices[0].id)
-                                                : "",
+                                            payment_amount: price ? Number(price.amount).toFixed(2) : "",
                                         });
                                     }}
                                     className={field}
                                 >
-                                    <option value="">
-                                        Choose an expense type
-                                    </option>
-                                    {expenseOptions
-                                        .filter(
-                                            (option) =>
-                                                option.prices.length > 0,
-                                        )
-                                        .map((option) => (
-                                            <option
-                                                key={option.id}
-                                                value={option.id}
-                                            >
-                                                {option.name}
-                                            </option>
-                                        ))}
-                                </select>
-                            </label>
-                            <label className="block text-xs font-medium text-slate-600">
-                                Approved price
-                                <select
-                                    required
-                                    value={expenseForm.price_id}
-                                    onChange={(event) =>
-                                        setExpenseForm({
-                                            ...expenseForm,
-                                            price_id: event.target.value,
-                                        })
-                                    }
-                                    disabled={
-                                        !currentExpenseOption?.prices.length
-                                    }
-                                    className={field}
-                                >
-                                    <option value="">
-                                        Choose an effective price
-                                    </option>
-                                    {currentExpenseOption?.prices.map(
-                                        (price) => (
-                                            <option
-                                                key={price.id}
-                                                value={price.id}
-                                            >
-                                                {money(price.amount)} ·
-                                                effective{" "}
-                                                {dateLabel(
-                                                    price.effective_from,
-                                                )}
-                                            </option>
-                                        ),
-                                    )}
+                                    <option value="">Choose an other expense item</option>
+                                    {expenseOptions.map((option) => (
+                                        <option key={option.id} value={option.id}>{option.name} · {money(option.price.amount)}</option>
+                                    ))}
                                 </select>
                             </label>
                             <div className="grid gap-4 sm:grid-cols-2">
-                                <label className="block text-xs font-medium text-slate-600">
-                                    Quantity
+                                {!isBkashPayment && (
+                                    <label className="block text-xs font-medium text-slate-600">
+                                    Payment amount (BDT)
                                     <input
                                         required
                                         type="number"
-                                        min="0.001"
-                                        step="0.001"
-                                        value={expenseForm.quantity}
-                                        onChange={(event) =>
-                                            setExpenseForm({
-                                                ...expenseForm,
-                                                quantity: event.target.value,
-                                            })
-                                        }
+                                        min="0.01"
+                                        step="0.01"
+                                        value={expenseForm.payment_amount}
+                                        onChange={(event) => setExpenseForm({ ...expenseForm, payment_amount: event.target.value })}
                                         className={field}
                                     />
-                                </label>
+                                    </label>
+                                )}
                                 <label className="block text-xs font-medium text-slate-600">
-                                    Issue date
+                                    Payment date
                                     <input
                                         required
                                         type="date"
+                                        max={localDate()}
                                         value={expenseForm.issued_on}
-                                        onChange={(event) =>
-                                            void updateExpenseOptions(
-                                                event.target.value,
-                                            )
-                                        }
+                                        onChange={(event) => setExpenseForm({ ...expenseForm, issued_on: event.target.value })}
                                         className={field}
                                     />
                                 </label>
                             </div>
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <label className="block text-xs font-medium text-slate-600">
-                                    Due date (optional)
-                                    <input
-                                        type="date"
-                                        min={expenseForm.issued_on}
-                                        value={expenseForm.due_on}
-                                        onChange={(event) =>
-                                            setExpenseForm({
-                                                ...expenseForm,
-                                                due_on: event.target.value,
-                                            })
-                                        }
-                                        className={field}
-                                    />
-                                </label>
-                                <div className="rounded-xl bg-slate-50 px-4 py-3 text-xs text-slate-500">
-                                    Unit price:{" "}
-                                    <strong className="text-slate-800">
-                                        {currentPrice
-                                            ? money(currentPrice.amount)
-                                            : "—"}
-                                    </strong>
-                                    <br />
-                                    Charge total uses the selected price and
-                                    quantity.
-                                </div>
-                            </div>
-                            <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-4 text-sm">
-                                <input
-                                    type="checkbox"
-                                    checked={expenseForm.collect_payment}
-                                    onChange={(event) =>
+                            <label className="block text-xs font-medium text-slate-600">
+                                Payment method
+                                <select
+                                    required
+                                    value={expenseForm.payment_method_id}
+                                    onChange={(event) => {
                                         setExpenseForm({
                                             ...expenseForm,
-                                            collect_payment:
-                                                event.target.checked,
-                                            payment_amount: event.target.checked
-                                                ? (
-                                                      Number(
-                                                          currentPrice?.amount ??
-                                                              0,
-                                                      ) *
-                                                      Number(
-                                                          expenseForm.quantity,
-                                                      )
-                                                  ).toFixed(2)
-                                                : "",
-                                            payment_account_id: "",
-                                            payment_method_id: "",
+                                            payment_method_id: event.target.value,
                                             payment_reference: "",
                                             payer_phone: "",
-                                        })
-                                    }
-                                    className="mt-0.5"
-                                />
-                                <span>
-                                    <span className="block font-medium text-slate-700">
-                                        Record payment now
-                                    </span>
-                                    <span className="mt-1 block text-xs text-slate-500">
-                                        Leave unchecked to issue the bill and
-                                        collect payment later.
-                                    </span>
-                                </span>
+                                        });
+                                        setBkashSelected(true);
+                                    }}
+                                    className={field}
+                                >
+                                    <option value="">Select a payment method</option>
+                                    {expensePaymentMethods.map((method) => (
+                                        <option key={method.id} value={method.id}>{method.name}</option>
+                                    ))}
+                                </select>
                             </label>
-                            {expenseForm.collect_payment && (
-                                <div className="space-y-4 rounded-xl bg-slate-50 p-4">
-                                    <div className="grid gap-4 sm:grid-cols-2">
-                                        <label className="block text-xs font-medium text-slate-600">
-                                            Payment amount (BDT)
+                            {isBkashPayment && (
+                                <div className="space-y-3 rounded-xl border border-pink-200 bg-pink-50/70 p-4">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
                                             <input
-                                                required
-                                                type="number"
-                                                min="0.01"
-                                                step="0.01"
-                                                value={
-                                                    expenseForm.payment_amount
-                                                }
-                                                onChange={(event) =>
-                                                    setExpenseForm({
-                                                        ...expenseForm,
-                                                        payment_amount:
-                                                            event.target.value,
-                                                    })
-                                                }
-                                                className={field}
+                                                type="checkbox"
+                                                checked={bkashSelected}
+                                                onChange={(event) => setBkashSelected(event.target.checked)}
+                                                className="rounded border-slate-300 text-pink-600"
                                             />
+                                            bKash
                                         </label>
-                                        <label className="block text-xs font-medium text-slate-600">
-                                            Payment method
-                                            <select
-                                                required
-                                                value={
-                                                    expenseForm.payment_method_id
-                                                }
-                                                onChange={(event) =>
-                                                    setExpenseForm({
-                                                        ...expenseForm,
-                                                        payment_method_id:
-                                                            event.target.value,
-                                                        payment_reference: "",
-                                                        payer_phone: "",
-                                                    })
-                                                }
-                                                className={field}
+                                        <div className="flex items-center gap-2">
+                                            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800">Unverified</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setNotice("Verification API integration will be added later.")}
+                                                className="rounded-md border border-pink-200 bg-white px-2 py-1 text-[11px] font-semibold text-pink-700 hover:bg-pink-100"
                                             >
-                                                <option value="">
-                                                    Select a payment method
-                                                </option>
-                                                {paymentOptions.payment_methods.map(
-                                                    (method) => (
-                                                        <option
-                                                            key={method.id}
-                                                            value={method.id}
-                                                        >
-                                                            {method.name}
-                                                        </option>
-                                                    ),
-                                                )}
-                                            </select>
-                                        </label>
+                                                Request verification
+                                            </button>
+                                        </div>
                                     </div>
                                     <label className="block text-xs font-medium text-slate-600">
-                                        Deposit account
-                                        <select
-                                            required
-                                            value={
-                                                expenseForm.payment_account_id
-                                            }
-                                            onChange={(event) =>
-                                                setExpenseForm({
-                                                    ...expenseForm,
-                                                    payment_account_id:
-                                                        event.target.value,
-                                                })
-                                            }
-                                            className={field}
-                                        >
-                                            <option value="">
-                                                Select an account
-                                            </option>
-                                            {paymentOptions.financial_accounts.map(
-                                                (account) => (
-                                                    <option
-                                                        key={account.id}
-                                                        value={account.id}
-                                                    >
-                                                        {account.name} ·{" "}
-                                                        {account.account_type.replaceAll(
-                                                            "_",
-                                                            " ",
-                                                        )}
-                                                    </option>
-                                                ),
-                                            )}
-                                        </select>
-                                    </label>
-                                    <label className="block text-xs font-medium text-slate-600">
-                                        Transaction / reference
+                                        Payment amount (BDT)
                                         <input
-                                            required={
-                                                selectedExpensePaymentMethod?.requires_transaction_reference ??
-                                                false
-                                            }
-                                            value={
-                                                expenseForm.payment_reference
-                                            }
-                                            onChange={(event) =>
-                                                setExpenseForm({
-                                                    ...expenseForm,
-                                                    payment_reference:
-                                                        event.target.value,
-                                                })
-                                            }
+                                            required
+                                            type="number"
+                                            min="0.01"
+                                            step="0.01"
+                                            value={expenseForm.payment_amount}
+                                            onChange={(event) => setExpenseForm({ ...expenseForm, payment_amount: event.target.value })}
                                             className={field}
                                         />
                                     </label>
-                                    {selectedExpensePaymentMethod?.requires_sender_phone && (
-                                        <label className="block text-xs font-medium text-slate-600">
-                                            Sender phone
-                                            <input
-                                                required
-                                                type="tel"
-                                                value={expenseForm.payer_phone}
-                                                onChange={(event) =>
-                                                    setExpenseForm({
-                                                        ...expenseForm,
-                                                        payer_phone:
-                                                            event.target.value,
-                                                    })
-                                                }
-                                                className={field}
-                                            />
-                                        </label>
-                                    )}
-                                    {!paymentOptions.payment_methods.length ||
-                                    !paymentOptions.financial_accounts.length ? (
-                                        <p className="text-sm text-amber-700">
-                                            Active payment methods and financial
-                                            accounts are required to collect
-                                            payment now.
-                                        </p>
-                                    ) : null}
+                                    <label className="block text-xs font-medium text-slate-600">
+                                        Transaction ID
+                                        <input
+                                            required
+                                            value={expenseForm.payment_reference}
+                                            onChange={(event) => setExpenseForm({ ...expenseForm, payment_reference: event.target.value })}
+                                            className={field}
+                                        />
+                                    </label>
+                                    <label className="block text-xs font-medium text-slate-600">
+                                        Payer phone number
+                                        <input
+                                            required
+                                            type="tel"
+                                            value={expenseForm.payer_phone}
+                                            onChange={(event) => setExpenseForm({ ...expenseForm, payer_phone: event.target.value })}
+                                            className={field}
+                                        />
+                                    </label>
                                 </div>
                             )}
-                            <label className="block text-xs font-medium text-slate-600">
-                                Description (optional)
-                                <input
-                                    value={expenseForm.description}
-                                    onChange={(event) =>
-                                        setExpenseForm({
-                                            ...expenseForm,
-                                            description: event.target.value,
-                                        })
-                                    }
-                                    className={field}
-                                />
-                            </label>
+                            {!isBkashPayment && (
+                                <label className="block text-xs font-medium text-slate-600">
+                                    Transaction / reference
+                                    <input
+                                        value={expenseForm.payment_reference}
+                                        onChange={(event) => setExpenseForm({ ...expenseForm, payment_reference: event.target.value })}
+                                        className={field}
+                                    />
+                                </label>
+                            )}
                             <label className="block text-xs font-medium text-slate-600">
                                 Remarks (optional)
                                 <textarea
@@ -2124,14 +1343,11 @@ export default function StudentBillWorkspace() {
                                     type="submit"
                                     disabled={
                                         saving ||
+                                        !student || !expenseEnrollmentId ||
                                         !expenseForm.type_id ||
-                                        !expenseForm.price_id ||
-                                        (expenseForm.collect_payment &&
-                                            (!expenseForm.payment_amount ||
-                                                !expenseForm.payment_account_id ||
-                                                !expenseForm.payment_method_id ||
-                                                !paymentOptions.financial_accounts
-                                                    .length))
+                                        !expenseForm.payment_amount ||
+                                        !expenseForm.payment_method_id ||
+                                        (isBkashPayment && !bkashSelected)
                                     }
                                     className={primary}
                                 >
@@ -2143,17 +1359,13 @@ export default function StudentBillWorkspace() {
                                     ) : (
                                         <Plus size={16} />
                                     )}
-                                    {saving
-                                        ? "Saving…"
-                                        : expenseForm.collect_payment
-                                          ? "Issue bill & record payment"
-                                          : "Issue bill"}
+                                    {saving ? "Saving…" : "Create bill & payment"}
                                 </button>
                             </div>
                         </form>
                     )}
                     {dialog === "view" &&
-                        (selectedCharge || selectedPayment) && (
+                        selectedPayment && (
                         <div className="space-y-5">
                             <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
                                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -2170,12 +1382,7 @@ export default function StudentBillWorkspace() {
                                         </p>
                                     </div>
                                     <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                                        {selectedPayment?.status ??
-                                            (selectedCharge
-                                                ? statusLabel(
-                                                      selectedCharge,
-                                                  )
-                                                : "Payment")}
+                                        {selectedPayment.status}
                                     </span>
                                 </div>
                                 <div className="mt-4 grid gap-3 border-t border-slate-200 pt-4 sm:grid-cols-2">
@@ -2184,9 +1391,7 @@ export default function StudentBillWorkspace() {
                                             Charge
                                         </p>
                                         <p className="mt-1 text-sm font-medium">
-                                            {selectedPayment
-                                                ? selectedPayment.payment_number
-                                                : `${selectedCharge?.number} · ${selectedCharge?.description}`}
+                                            {selectedPayment.payment_number}
                                         </p>
                                     </div>
                                     <div>
@@ -2194,13 +1399,7 @@ export default function StudentBillWorkspace() {
                                             Issue date
                                         </p>
                                         <p className="mt-1 text-sm font-medium">
-                                            {selectedPayment
-                                                ? dateTimeLabel(
-                                                      selectedPayment.paid_at,
-                                                  )
-                                                : dateLabel(
-                                                      selectedCharge?.issuedOn,
-                                                  )}
+                                            {dateTimeLabel(selectedPayment.paid_at)}
                                         </p>
                                     </div>
                                 </div>
@@ -2268,26 +1467,6 @@ export default function StudentBillWorkspace() {
                                             </div>
                                         )}
                                     </dl>
-                                </section>
-                            )}
-                            {selectedCharge && !selectedPayment && (
-                                <section className="grid gap-3 sm:grid-cols-2">
-                                <div className="rounded-xl border border-slate-200 p-4">
-                                    <p className="text-xs text-slate-500">
-                                        Payable
-                                    </p>
-                                    <p className="mt-1 font-semibold text-[#17375C]">
-                                        {money(selectedCharge.amount)}
-                                    </p>
-                                </div>
-                                <div className="rounded-xl border border-slate-200 p-4">
-                                    <p className="text-xs text-slate-500">
-                                        Paid
-                                    </p>
-                                    <p className="mt-1 font-semibold text-emerald-700">
-                                        {money(selectedCharge.paid)}
-                                    </p>
-                                </div>
                                 </section>
                             )}
                         </div>

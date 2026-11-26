@@ -6,7 +6,9 @@ use App\Models\Institute\Institute;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
 
 /** Reads and updates an institute's settings and its associated branch records. */
 class InstituteSettingService
@@ -25,6 +27,13 @@ class InstituteSettingService
         $institute = Institute::query()->findOrFail($instituteId);
         $branches = $data['branches'] ?? null;
         $deletedBranchIds = $data['deleted_branch_ids'] ?? [];
+
+        // Return a clear deployment error instead of querying a column not present before migration.
+        if ($branches !== null && collect($branches)->contains(fn (array $branch): bool => array_key_exists('is_main_branch', $branch))
+            && ! Schema::hasColumn('branches', 'is_main_branch')) {
+            throw new ServiceUnavailableHttpException(null, 'The main-branch database migration has not been applied yet.');
+        }
+
         unset($data['branches']);
         unset($data['deleted_branch_ids'], $data['logo'], $data['remove_logo']);
 
@@ -50,6 +59,28 @@ class InstituteSettingService
                     foreach ($branches as $branchData) {
                         $branchId = $branchData['id'] ?? null;
                         unset($branchData['id']);
+
+                        $existingBranch = $branchId === null
+                            ? null
+                            : $institute->branches()->whereKey($branchId)->firstOrFail();
+                        $becomesInactive = array_key_exists('is_active', $branchData) && ! $branchData['is_active'];
+                        $isCurrentMainBranch = $existingBranch?->is_main_branch === true;
+
+                        if ($becomesInactive && (($branchData['is_main_branch'] ?? false) === true || $isCurrentMainBranch)) {
+                            throw ValidationException::withMessages([
+                                'branches' => 'The main branch must remain active. Select another active main branch first.',
+                            ]);
+                        }
+
+                        // A selected main branch replaces the previous one within this institute.
+                        if (($branchData['is_main_branch'] ?? false) === true) {
+                            $institute->branches()->where('is_main_branch', true)->update(['is_main_branch' => false]);
+                        } elseif ($branchId !== null && ($branchData['is_main_branch'] ?? null) === false
+                            && $isCurrentMainBranch) {
+                            throw ValidationException::withMessages([
+                                'branches' => 'Select another main branch before clearing the current main branch.',
+                            ]);
+                        }
 
                         if ($branchId !== null) {
                             $institute->branches()->whereKey($branchId)->firstOrFail()->update($branchData);

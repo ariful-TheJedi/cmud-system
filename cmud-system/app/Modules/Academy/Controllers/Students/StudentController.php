@@ -6,10 +6,26 @@ use App\Http\Controllers\Controller;
 use App\Models\Academy\Student;
 use App\Modules\Academy\Requests\StudentSearchRequest;
 use App\Modules\Academy\Services\Students\StudentSearchService;
+use App\Modules\Finance\Services\StudentFinance\StudentPaymentService;
 use Illuminate\Http\JsonResponse;
 
 class StudentController extends Controller
 {
+    /** Resolve the exact ID through billing scope and provide current payment choices. */
+    public function billingSearch(StudentSearchRequest $request, StudentPaymentService $payments): JsonResponse
+    {
+        $filters = $request->validated();
+        $studentCode = (string) ($filters['student_code'] ?? $filters['search'] ?? '');
+
+        if ($studentCode === '') {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'student_code' => 'Enter an exact Student ID to view billing enrollments.',
+            ]);
+        }
+
+        return response()->json(['data' => $payments->billingOptions($studentCode, $request->user())]);
+    }
+
     public function index(StudentSearchRequest $request, StudentSearchService $students): JsonResponse
     {
         $filters = $request->validated();

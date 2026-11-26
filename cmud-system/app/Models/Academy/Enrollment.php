@@ -141,7 +141,8 @@ class Enrollment extends Model
      */
     public function getTuitionAttribute(): ?array
     {
-        if (! $this->hasTuition()) {
+        $payments = $this->relationLoaded('tuitionPayments') ? $this->tuitionPayments : collect();
+        if (! $this->hasTuition() && $payments->isEmpty()) {
             return null;
         }
 
@@ -156,7 +157,7 @@ class Enrollment extends Model
             'due_on' => $this->getRawOriginal('tuition_due_on'),
             'status' => $this->tuition_status,
             'cancelled_at' => $this->tuition_cancelled_at,
-            'payments' => $this->relationLoaded('tuitionPayments') ? $this->tuitionPayments->toArray() : [],
+            'payments' => $payments->toArray(),
         ];
     }
 

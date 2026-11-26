@@ -90,15 +90,17 @@ class StudentFinancialOverviewService
             $hasBill = false;
             $overdue = false;
 
+            // Direct enrollment receipts can exist even when no tuition bill was issued.
+            foreach ($enrollment->tuitionPayments as $payment) {
+                if ($payment->getRawOriginal('status') === 'confirmed') {
+                    $paid += $this->toCents($payment->amount);
+                }
+            }
+
             if ($tuition instanceof Enrollment && ! $this->isCancelled($tuition)) {
                 $hasBill = true;
                 $courseFee = $this->toCents($tuition->tuition_original_amount);
                 $waiver = $this->tuitionWaiverCents($tuition);
-                foreach ($tuition->tuitionPayments as $payment) {
-                    if ($payment->getRawOriginal('status') === 'confirmed') {
-                        $paid += $this->toCents($payment->amount);
-                    }
-                }
                 $due = max(0, $courseFee - $waiver - $paid);
                 $overdue = $due > 0 && $this->isPastDue($tuition->getRawOriginal('tuition_due_on'));
             }
@@ -205,7 +207,17 @@ class StudentFinancialOverviewService
             return null;
         }
 
-        $tuition = $enrollment->hasTuition() ? $enrollment->load(['tuitionPayments' => fn ($query) => $query->orderByDesc('paid_at'), 'tuitionPayments.paymentMethod:id,name']) : null;
+        $enrollment->load(['tuitionPayments' => fn ($query) => $query->orderByDesc('paid_at'), 'tuitionPayments.paymentMethod:id,name']);
+        $tuition = $enrollment->hasTuition() ? $enrollment : null;
+        $tuitionPayments = $enrollment->tuitionPayments->map(fn (StudentTuitionPayment $payment): array => [
+            'payment_number' => $payment->payment_number,
+            'amount' => $this->formatCents($this->toCents($payment->amount)),
+            'paid_at' => Carbon::parse((string) $payment->getRawOriginal('paid_at'))->toIso8601String(),
+            'status' => (string) $payment->getRawOriginal('status'),
+            'transaction_reference' => $payment->transaction_reference,
+            'receipt_path' => $payment->proof_file_path,
+            'payment_method' => $payment->paymentMethod?->name,
+        ])->all();
         $expenses = StudentExpense::query()
             ->where(fn ($query) => $query
                 ->where('enrollment_id', $enrollment->id)
@@ -228,16 +240,9 @@ class StudentFinancialOverviewService
                     $this->toCents($tuition->tuition_original_amount) - $this->tuitionWaiverCents($tuition),
                 )),
                 'due_on' => $tuition->getRawOriginal('tuition_due_on'),
-                'payments' => $tuition->tuitionPayments->map(fn (StudentTuitionPayment $payment): array => [
-                    'payment_number' => $payment->payment_number,
-                    'amount' => $this->formatCents($this->toCents($payment->amount)),
-                    'paid_at' => Carbon::parse((string) $payment->getRawOriginal('paid_at'))->toIso8601String(),
-                    'status' => (string) $payment->getRawOriginal('status'),
-                    'transaction_reference' => $payment->transaction_reference,
-                    'receipt_path' => $payment->proof_file_path,
-                    'payment_method' => $payment->paymentMethod?->name,
-                ])->all(),
+                'payments' => $tuitionPayments,
             ] : null,
+            'unbilled_tuition_payments' => $tuition === null ? $tuitionPayments : [],
             'other_bills' => $expenses->map(function (StudentExpense $expense): array {
                 $balance = $this->expenseBalance($expense);
 

@@ -53,7 +53,7 @@ type BillingRecord = {
     } | null;
     payee_name: string;
     invoice_number: string | null;
-    branch: { id: number; name: string; code: string | null } | null;
+    branch: { id: number; name: string; code: string | null; phone: string | null; email: string | null; address: string | null } | null;
     department: { id: number; name: string; code: string | null } | null;
     billing_date: string;
     due_date: string | null;
@@ -1173,6 +1173,7 @@ export default function InstituteBillingWorkspace() {
                                     record={selectedRecord}
                                     onClose={() => setDialog(null)}
                                     onPrint={printRecord}
+                                    onUpdateStatus={() => openStatusEditor(selectedRecord)}
                                 />
                             )}
                         </>
@@ -1932,10 +1933,12 @@ function BillDetails({
     record,
     onClose,
     onPrint,
+    onUpdateStatus,
 }: {
     record: BillingRecord;
     onClose: () => void;
     onPrint: () => void;
+    onUpdateStatus: () => void;
 }) {
     return (
         <div className="space-y-5">
@@ -1959,6 +1962,19 @@ function BillDetails({
                     {record.payment_status}
                 </span>
             </div>
+            <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-teal-100 bg-teal-50/60 p-4">
+                <div>
+                    <p className="text-xs font-medium text-slate-500">Approval status</p>
+                    <p className="mt-1 text-sm font-semibold capitalize text-[#17375C]">{record.approval_status.replaceAll('_', ' ')}</p>
+                </div>
+                <button
+                    type="button"
+                    onClick={onUpdateStatus}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#17375C] px-3 py-2 text-sm font-semibold text-white hover:bg-[#254878]"
+                >
+                    <Pencil size={15} /> Change status
+                </button>
+            </section>
             <dl className="grid gap-4 sm:grid-cols-2">
                 {[
                     ['Payee', record.payee_name],
@@ -2137,9 +2153,9 @@ function PrintableBill({
                     <p className="mt-1 text-xs text-slate-500">
                         CMUD {record.branch?.name ?? 'Institute-wide'} Office
                     </p>
-                    {(branding?.phone || branding?.email) && (
+                    {(record.branch?.address || record.branch?.phone || record.branch?.email) && (
                         <p className="mt-1 text-[10px] text-slate-500">
-                            {[branding.phone, branding.email]
+                            {[record.branch.address, record.branch.phone, record.branch.email]
                                 .filter(Boolean)
                                 .join(' · ')}
                         </p>

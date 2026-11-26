@@ -45,6 +45,7 @@ Route::middleware(['auth'])->group(function (): void {
     Route::redirect('/billings', '/billings/student-bill')->name('billings.index');
     Route::inertia('/billings/student-bill', 'billings/student-bill')->name('billings.student-bill');
     Route::inertia('/billings/institute-billing', 'billings/institute-billing')->name('billings.institute-billing');
+    Route::inertia('/billings/institute-other-bill', 'billings/institute-other-bill')->name('billings.institute-other-bill');
 
     // Inventory has its own authenticated page while the module workflows are built out.
     Route::inertia('/inventory', 'inventory/index')->name('inventory.index');

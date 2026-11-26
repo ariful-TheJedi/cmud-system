@@ -29,12 +29,14 @@ class Branch extends Model
         'email',
         'address',
         'is_active',
+        'is_main_branch',
     ];
 
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
+            'is_main_branch' => 'boolean',
         ];
     }
 
