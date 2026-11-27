@@ -27,6 +27,7 @@ class Enrollment extends Model
         'enrollment_code',
         'student_id',
         'course_id',
+        'readmitted_from_enrollment_id',
         'branch_id',
         'batch_id',
         'enrollment_date',
@@ -103,6 +104,18 @@ class Enrollment extends Model
     public function stageRecords(): HasMany
     {
         return $this->hasMany(StudentStageRecord::class);
+    }
+
+    /** @return BelongsTo<Enrollment, $this> */
+    public function readmittedFrom(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'readmitted_from_enrollment_id');
+    }
+
+    /** @return HasMany<Enrollment, $this> */
+    public function readmissions(): HasMany
+    {
+        return $this->hasMany(self::class, 'readmitted_from_enrollment_id');
     }
 
     /** @return HasMany<Certificate, $this> */

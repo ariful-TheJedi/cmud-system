@@ -86,7 +86,7 @@ class ExamControlService
                 'stageRecords.examRecords' => fn ($query) => $query->orderByDesc('attempt_number'),
             ])
             ->orderBy('id')
-            ->paginate((int) ($filters['per_page'] ?? 20));
+            ->paginate((int) ($filters['per_page'] ?? 15));
 
         $enrollments->getCollection()->transform(function (Enrollment $enrollment): array {
             $durationAnchor = $enrollment->getRawOriginal('starts_on')

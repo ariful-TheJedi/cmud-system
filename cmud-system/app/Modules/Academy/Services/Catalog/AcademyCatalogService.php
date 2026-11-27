@@ -17,46 +17,60 @@ use Illuminate\Validation\ValidationException;
  */
 class AcademyCatalogService
 {
-    /** Return a paginated course list with the catalog relationships used by callers. */
+    /** Return courses with their reusable direct modules and stage assignments. */
     /** @return LengthAwarePaginator<int, Course> */
-    public function courses(int $perPage = 25): LengthAwarePaginator
+    public function courses(int $perPage = 15): LengthAwarePaginator
     {
-        return Course::query()
-            ->with(['institute:id,name', 'subjects:id,course_id,code,name', 'batches:id,course_id,branch_id,code,name,status'])
+        $courses = Course::query()
+            ->with(['institute:id,name', 'subjects:id,code,name', 'stages.subjects:id,code,name', 'batches:id,course_id,branch_id,code,name,status'])
             ->orderBy('name')
             ->paginate($perPage);
+
+        // The catalog's subjects field represents all modules used by the course, including stage links.
+        $courses->getCollection()->each(function (Course $course): void {
+            $stageSubjects = $course->stages->flatMap(fn (CourseStage $stage) => $stage->subjects);
+            $course->setRelation('subjects', $course->subjects->merge($stageSubjects)->unique('id')->values());
+        });
+
+        return $courses;
     }
 
     public function courseDetails(Course $course): Course
     {
         return $course->load([
             'institute:id,name',
-            'subjects:id,course_id,code,name',
-            'stages:id,course_id,code,name,sequence_number,duration_months,is_mandatory,requires_exam,is_active',
-            'batches:id,course_id,branch_id,code,name,status,starts_on,capacity',
+            'subjects:id,code,name',
+            'stages:id,course_id,code,name,sequence_number,duration_months,is_mandatory,requires_exam,certificate_enabled,is_active',
+            'stages.subjects:id,code,name',
+            'batches' => fn ($query) => $query
+                ->select('id', 'course_id', 'branch_id', 'code', 'name', 'status', 'starts_on', 'capacity')
+                ->withCount(['currentlyEnrolledStudents as enrolled_students_count']),
             'batches.branch:id,name',
         ]);
     }
 
     /** Return a paginated batch list with its course and branch labels. */
     /** @return LengthAwarePaginator<int, Batch> */
-    public function batches(): LengthAwarePaginator
+    public function batches(int $perPage = 15): LengthAwarePaginator
     {
         return Batch::query()
             ->with(['course:id,code,name', 'branch:id,name'])
+            ->withCount(['currentlyEnrolledStudents as enrolled_students_count'])
             ->orderByDesc('starts_on')
-            ->paginate(25);
+            ->paginate($perPage);
     }
 
     public function batchDetails(Batch $batch): Batch
     {
-        return $batch->load(['course:id,code,name', 'branch:id,name']);
+        return $batch->load(['course:id,code,name', 'branch:id,name'])
+            ->loadCount(['currentlyEnrolledStudents as enrolled_students_count']);
     }
 
     /** @return LengthAwarePaginator<int, CourseStage> */
     public function stages(Course $course): LengthAwarePaginator
     {
         return $course->stages()
+            ->with('subjects:id,code,name')
             ->orderBy('sequence_number')
             ->paginate(100);
     }
@@ -65,15 +79,35 @@ class AcademyCatalogService
     {
         $this->assertStageBelongsToCourse($course, $stage);
 
-        return $stage->load('course:id,code,name');
+        return $stage->load(['course:id,code,name', 'subjects:id,code,name']);
     }
 
-    /** Return paginated course modules with their single owning course. */
+    /** Return independent modules with their course and stage assignments. */
     /** @return LengthAwarePaginator<int, Subject> */
-    public function subjects(int $perPage = 25): LengthAwarePaginator
+    public function subjects(int $perPage = 15, ?string $search = null): LengthAwarePaginator
     {
         return Subject::query()
-            ->with('course:id,code,name')
+            ->when(filled($search), function ($query) use ($search): void {
+                $term = '%'.mb_strtolower(trim((string) $search)).'%';
+
+                // Search module details and linked course/stage names across every page.
+                $query->where(function ($searchQuery) use ($term): void {
+                    $searchQuery
+                        ->whereRaw('LOWER(name) LIKE ?', [$term])
+                        ->orWhereRaw('LOWER(code) LIKE ?', [$term])
+                        ->orWhereRaw('LOWER(description) LIKE ?', [$term])
+                        ->orWhereHas('courses', fn ($courseQuery) => $courseQuery
+                            ->whereRaw('LOWER(courses.name) LIKE ?', [$term])
+                            ->orWhereRaw('LOWER(courses.code) LIKE ?', [$term]))
+                        ->orWhereHas('courseStages', fn ($stageQuery) => $stageQuery
+                            ->whereRaw('LOWER(course_stages.name) LIKE ?', [$term])
+                            ->orWhereRaw('LOWER(course_stages.code) LIKE ?', [$term])
+                            ->orWhereHas('course', fn ($courseQuery) => $courseQuery
+                                ->whereRaw('LOWER(courses.name) LIKE ?', [$term])
+                                ->orWhereRaw('LOWER(courses.code) LIKE ?', [$term])));
+                });
+            })
+            ->with(['courses:id,code,name', 'courseStages:id,course_id,code,name,sequence_number', 'courseStages.course:id,code,name'])
             ->orderBy('name')
             ->paginate($perPage);
     }
@@ -82,15 +116,21 @@ class AcademyCatalogService
     public function createCourse(array $data): Course
     {
         return DB::transaction(function () use ($data): Course {
-            // Course creation is independent; modules are assigned through their course_id.
+            // Keep reusable module links in the course pivot, never on subject rows.
+            $subjectIds = $data['subject_ids'] ?? null;
+            unset($data['subject_ids']);
+
             $status = $data['status'] ?? (($data['is_active'] ?? true) ? 'active' : 'inactive');
             $data['status'] = $status;
             $data['is_active'] = $status === 'active';
             $data['is_available_for_enrollment'] = (bool) ($data['is_available_for_enrollment'] ?? $status === 'active');
 
             $course = Course::query()->create($data);
+            if ($subjectIds !== null) {
+                $course->subjects()->sync($subjectIds);
+            }
 
-            return $course->load(['institute:id,name', 'subjects:id,course_id,code,name']);
+            return $course->load(['institute:id,name', 'subjects:id,code,name']);
         });
     }
 
@@ -98,6 +138,9 @@ class AcademyCatalogService
     public function updateCourse(Course $course, array $data): Course
     {
         return DB::transaction(function () use ($course, $data): Course {
+            $subjectIds = $data['subject_ids'] ?? null;
+            unset($data['subject_ids']);
+
             if (isset($data['status'])) {
                 $data['is_active'] = $data['status'] === 'active';
 
@@ -109,8 +152,18 @@ class AcademyCatalogService
             }
 
             $course->update($data);
+            if ($subjectIds !== null) {
+                $currentSubjectIds = $course->subjects()->pluck('subjects.id')->map(fn ($id) => (int) $id)->sort()->values()->all();
+                $requestedSubjectIds = collect($subjectIds)->map(fn ($id) => (int) $id)->sort()->values()->all();
+                if ($course->enrollments()->exists() && $currentSubjectIds !== $requestedSubjectIds) {
+                    throw ValidationException::withMessages([
+                        'subject_ids' => 'Course module assignments cannot change after students are enrolled.',
+                    ]);
+                }
+                $course->subjects()->sync($subjectIds);
+            }
 
-            return $course->refresh()->load(['institute:id,name', 'subjects:id,course_id,code,name']);
+            return $course->refresh()->load(['institute:id,name', 'subjects:id,code,name']);
         });
     }
 
@@ -190,6 +243,8 @@ class AcademyCatalogService
     public function createStage(Course $course, array $data): CourseStage
     {
         return DB::transaction(function () use ($course, $data): CourseStage {
+            $subjectIds = $data['subject_ids'] ?? [];
+            unset($data['subject_ids']);
             Course::query()->whereKey($course->id)->lockForUpdate()->firstOrFail();
             if ($course->enrollments()->exists()) {
                 throw ValidationException::withMessages([
@@ -198,7 +253,10 @@ class AcademyCatalogService
             }
             $this->assertStageSequenceAvailable($course, (int) $data['sequence_number']);
 
-            return $course->stages()->create($data);
+            $stage = $course->stages()->create($data);
+            $stage->subjects()->sync($subjectIds);
+
+            return $stage->load('subjects:id,code,name');
         });
     }
 
@@ -206,13 +264,18 @@ class AcademyCatalogService
     public function updateStage(CourseStage $stage, array $data): CourseStage
     {
         return DB::transaction(function () use ($stage, $data): CourseStage {
+            $subjectIds = $data['subject_ids'] ?? null;
+            unset($data['subject_ids']);
             $course = Course::query()->whereKey($stage->course_id)->lockForUpdate()->firstOrFail();
             $structureFields = ['code', 'name', 'sequence_number', 'duration_months', 'is_mandatory', 'requires_exam', 'is_active'];
-            if ($course->enrollments()->exists()
-                && collect($structureFields)->contains(
+            $subjectAssignmentsChanged = $subjectIds !== null
+                && $stage->subjects()->pluck('subjects.id')->map(fn ($id) => (int) $id)->sort()->values()->all()
+                    !== collect($subjectIds)->map(fn ($id) => (int) $id)->sort()->values()->all();
+            $structureChanged = collect($structureFields)->contains(
                     fn (string $field): bool => array_key_exists($field, $data)
                         && $data[$field] !== $stage->getAttribute($field),
-                )) {
+                );
+            if ($course->enrollments()->exists() && ($structureChanged || $subjectAssignmentsChanged)) {
                 throw ValidationException::withMessages([
                     'stage' => 'Academic stage structure cannot change after students are enrolled in the course.',
                 ]);
@@ -227,8 +290,11 @@ class AcademyCatalogService
             }
 
             $stage->update($data);
+            if ($subjectIds !== null) {
+                $stage->subjects()->sync($subjectIds);
+            }
 
-            return $stage->refresh();
+            return $stage->refresh()->load('subjects:id,code,name');
         });
     }
 
@@ -239,7 +305,11 @@ class AcademyCatalogService
             return false;
         }
 
-        $stage->delete();
+        DB::transaction(function () use ($stage): void {
+            // Remove stage-module links before deleting the stage protected by pivot foreign keys.
+            $stage->subjects()->detach();
+            $stage->delete();
+        });
 
         return true;
     }
@@ -256,9 +326,7 @@ class AcademyCatalogService
     /** @param array<string, mixed> $data */
     public function createSubject(array $data): Subject
     {
-        $subject = Subject::query()->create($data);
-
-        return $subject->load('course:id,code,name');
+        return Subject::query()->create($data);
     }
 
     /** @param array<string, mixed> $data */
@@ -266,14 +334,20 @@ class AcademyCatalogService
     {
         $subject->update($data);
 
-        return $subject->refresh()->load('course:id,code,name');
+        return $subject->refresh();
     }
 
-    public function deleteSubject(Subject $subject): void
+    public function deleteSubject(Subject $subject): bool
     {
+        if ($subject->courses()->exists() || $subject->courseStages()->exists() || $subject->teachers()->exists()) {
+            return false;
+        }
+
         DB::transaction(function () use ($subject): void {
             $subject->delete();
         });
+
+        return true;
     }
 
     private function assertBatchBranchBelongsToCourse(int $courseId, int $branchId): void

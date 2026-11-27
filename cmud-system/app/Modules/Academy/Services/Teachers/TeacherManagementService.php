@@ -11,18 +11,18 @@ class TeacherManagementService
 {
     /** Return teachers with their institute, optional stuff profile, modules, and branches. */
     /** @return LengthAwarePaginator<int, Teacher> */
-    public function paginate(): LengthAwarePaginator
+    public function paginate(int $perPage = 15): LengthAwarePaginator
     {
         return Teacher::query()
-            ->with(['institute:id,name', 'stuff:id,stuff_code,full_name', 'subjects:id,course_id,code,name', 'subjects.course:id,code,name', 'branches:id,name'])
+            ->with(['institute:id,name', 'stuff:id,stuff_code,full_name', 'subjects:id,code,name', 'subjects.courses:id,code,name', 'subjects.courseStages:id,course_id,code,name', 'subjects.courseStages.course:id,code,name', 'branches:id,name'])
             ->orderBy('full_name')
-            ->paginate(25);
+            ->paginate($perPage);
     }
 
     /** Return one teacher with the relationships used by the management API. */
     public function find(Teacher $teacher): Teacher
     {
-        return $teacher->load(['institute:id,name', 'stuff:id,stuff_code,full_name', 'subjects:id,course_id,code,name', 'subjects.course:id,code,name', 'branches:id,name']);
+        return $teacher->load(['institute:id,name', 'stuff:id,stuff_code,full_name', 'subjects:id,code,name', 'subjects.courses:id,code,name', 'subjects.courseStages:id,course_id,code,name', 'subjects.courseStages.course:id,code,name', 'branches:id,name']);
     }
 
     /** @param array<string, mixed> $data */

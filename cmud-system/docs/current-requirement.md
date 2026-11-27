@@ -46,7 +46,13 @@ Academy
 Certificate mangement
  - this page only job is findout eligible candidate for the cerficate and 
   chnage the status like issued, delivered, 
-- maintain the application for reissue certificate,
+ - maintain the application for reissue certificate,
+
+
+
+
+Curse Page
+ - 
 
  
 Examcontroll page
@@ -54,6 +60,19 @@ Examcontroll page
  - user can find students list for a particular curse batch
  - admin user can update the student exam status like eligible for exam, sbmitted paper, pending for result, passed, failed, retake etc..
  - admin can't issue the exam eligibility if the student didn't complete the curse duration.(batch has curse duration)
+
+
+
+
+ Test Case scenerio for student life cycle:
+ ============================================
+ 1. a stedent enrolled a advance curse has  semister to finish
+ 2. a student 1 semister and eligible for 1 semister certificate
+ 3. a student finished 3 semister and eleigible for final certificate
+ 4. a student enrolled a curse bt finished curse the exceed the palnned duration
+ 5. a student enrolled a curse finishe in the vilidation period
+ 6. a studet exceed the validation period
+ 7. 
 
 
 

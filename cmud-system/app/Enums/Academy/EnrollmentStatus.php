@@ -10,4 +10,5 @@ enum EnrollmentStatus: string
     case Completed = 'completed';
     case Discontinued = 'discontinued';
     case Cancelled = 'cancelled';
+    case Expired = 'expired';
 }

@@ -24,6 +24,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import type { Auth } from "@/types/auth";
+import BillingPagination from './components/billing-pagination';
 
 type Student = {
     id: number;
@@ -840,46 +841,7 @@ export default function StudentBillWorkspace() {
                                 </tbody>
                             </table>
                         </div>
-                        <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4 text-xs text-slate-500">
-                            <span>
-                                Page {registerMeta.current_page} of{" "}
-                                {registerMeta.last_page}
-                            </span>
-                            <div className="flex gap-2">
-                                <button
-                                    type="button"
-                                    disabled={
-                                        loadingRegister || registerPage <= 1
-                                    }
-                                    onClick={() =>
-                                        setRegisterPage((page) =>
-                                            Math.max(1, page - 1),
-                                        )
-                                    }
-                                    className="rounded-lg border border-slate-200 px-3 py-2 disabled:opacity-40"
-                                >
-                                    Previous
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={
-                                        loadingRegister ||
-                                        registerPage >= registerMeta.last_page
-                                    }
-                                    onClick={() =>
-                                        setRegisterPage((page) =>
-                                            Math.min(
-                                                registerMeta.last_page,
-                                                page + 1,
-                                            ),
-                                        )
-                                    }
-                                    className="rounded-lg border border-slate-200 px-3 py-2 disabled:opacity-40"
-                                >
-                                    Next
-                                </button>
-                            </div>
-                        </div>
+                        <BillingPagination page={registerMeta.current_page} lastPage={registerMeta.last_page} perPage={registerMeta.per_page} total={registerMeta.total} loading={loadingRegister} recordLabel="payment records" onPageChange={setRegisterPage} />
                     </section>
                 </div>
             </main>

@@ -38,7 +38,10 @@ class CourseStageRequest extends FormRequest
             'description' => ['sometimes', 'nullable', 'string'],
             'is_mandatory' => ['sometimes', 'boolean'],
             'requires_exam' => ['sometimes', 'boolean'],
+            'certificate_enabled' => ['sometimes', 'boolean'],
             'is_active' => ['sometimes', 'boolean'],
+            'subject_ids' => ['sometimes', 'array'],
+            'subject_ids.*' => ['integer', 'distinct', 'exists:subjects,id'],
         ];
     }
 }

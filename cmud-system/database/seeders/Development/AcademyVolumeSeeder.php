@@ -247,11 +247,16 @@ class AcademyVolumeSeeder extends Seeder
             $code = 'DEV-ACA-SUBJ-'.str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT);
             $saved = $this->saveRow('subjects', ['code' => $code], [
                 'name' => $name,
-                'course_id' => $courseIds[$index % count($courseIds)],
                 'description' => 'Fictional Academy reference subject for development data.',
                 'is_active' => true,
             ]);
             $subjects[$code] = (int) $saved->id;
+            DB::table('course_subject')->insertOrIgnore([
+                'course_id' => $courseIds[$index % count($courseIds)],
+                'subject_id' => $subjects[$code],
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
         }
 
         return $subjects;

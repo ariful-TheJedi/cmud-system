@@ -7,12 +7,15 @@ use App\Models\Academy\Teacher;
 use App\Modules\Academy\Requests\TeacherRequest;
 use App\Modules\Academy\Services\Teachers\TeacherManagementService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class TeacherManagementController extends Controller
 {
-    public function index(TeacherManagementService $teachers): JsonResponse
+    public function index(Request $request, TeacherManagementService $teachers): JsonResponse
     {
-        return response()->json($teachers->paginate());
+        $perPage = min(max($request->integer('per_page', 15), 1), 100);
+
+        return response()->json($teachers->paginate($perPage));
     }
 
     public function show(Teacher $teacher, TeacherManagementService $teachers): JsonResponse

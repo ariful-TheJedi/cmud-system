@@ -110,6 +110,31 @@ type StatusForm = {
     remarks: string;
 };
 
+/** Keep roster pagination compact while exposing direct page navigation. */
+function paginationItems(currentPage: number, lastPage: number): Array<number | '…'> {
+    const visiblePageCount = 5;
+
+    if (lastPage <= visiblePageCount + 1) {
+        return Array.from({ length: lastPage }, (_, index) => index + 1);
+    }
+
+    const start = Math.min(Math.max(1, currentPage - Math.floor(visiblePageCount / 2)), lastPage - visiblePageCount + 1);
+    const end = start + visiblePageCount - 1;
+    const items: Array<number | '…'> = [];
+
+    if (start > 1) {
+        items.push(1);
+        if (start > 2) items.push('…');
+    }
+    for (let pageNumber = start; pageNumber <= end; pageNumber += 1) items.push(pageNumber);
+    if (end < lastPage) {
+        if (end < lastPage - 1) items.push('…');
+        items.push(lastPage);
+    }
+
+    return items;
+}
+
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Academic management', href: '/academy/manage/courses' },
     { title: 'Exam Control', href: '/academy/students/exam-control' },
@@ -163,7 +188,7 @@ export default function ExamControl() {
     const [meta, setMeta] = useState({
         current_page: 1,
         last_page: 1,
-        per_page: 20,
+        per_page: 15,
         total: 0,
     });
     const [loadingBatches, setLoadingBatches] = useState(true);
@@ -226,7 +251,7 @@ export default function ExamControl() {
                 setMeta({
                     current_page: 1,
                     last_page: 1,
-                    per_page: 20,
+                    per_page: 15,
                     total: 0,
                 });
                 return;
@@ -237,7 +262,7 @@ export default function ExamControl() {
                     batch_id: selectedBatchId,
                     search,
                     page: String(page),
-                    per_page: '20',
+                    per_page: '15',
                 });
                 const response = await request<RosterResponse>(
                     `/exam-control/students?${params.toString()}`,
@@ -783,47 +808,47 @@ export default function ExamControl() {
                                 </tbody>
                             </table>
                         </div>
-                        {meta.last_page > 1 && (
-                            <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3 text-sm text-slate-600">
-                                <span>
-                                    Page {meta.current_page} of {meta.last_page}
-                                </span>
-                                <div className="flex gap-2">
-                                    <button
+                        <footer className="flex flex-col justify-between gap-3 border-t border-slate-100 px-5 py-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:px-6">
+                            <span>
+                                Showing{' '}
+                                <strong className="text-slate-700">
+                                    {meta.total === 0 ? 0 : (meta.current_page - 1) * meta.per_page + 1}
+                                    {'–'}
+                                    {Math.min(meta.current_page * meta.per_page, meta.total)}
+                                </strong>{' '}
+                                of <strong className="text-slate-700">{meta.total}</strong> student records
+                            </span>
+                            <div className="flex items-center gap-1" aria-label="Exam roster pages">
+                                <button
+                                    type="button"
+                                    disabled={loadingRoster || meta.current_page <= 1}
+                                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                                    aria-label="Previous page"
+                                    className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-500 disabled:text-slate-300"
+                                >
+                                    <ChevronLeft size={16} />
+                                </button>
+                                {paginationItems(meta.current_page, meta.last_page).map((item, index) => item === '…'
+                                    ? <span key={`ellipsis-${index}`} className="px-1 text-slate-400" aria-hidden="true">…</span>
+                                    : <button
+                                        key={item}
                                         type="button"
-                                        disabled={loadingRoster || page <= 1}
-                                        onClick={() =>
-                                            setPage((current) =>
-                                                Math.max(1, current - 1),
-                                            )
-                                        }
-                                        aria-label="Previous page"
-                                        className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 disabled:text-slate-300"
-                                    >
-                                        <ChevronLeft size={17} />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        disabled={
-                                            loadingRoster ||
-                                            page >= meta.last_page
-                                        }
-                                        onClick={() =>
-                                            setPage((current) =>
-                                                Math.min(
-                                                    meta.last_page,
-                                                    current + 1,
-                                                ),
-                                            )
-                                        }
-                                        aria-label="Next page"
-                                        className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 disabled:text-slate-300"
-                                    >
-                                        <ChevronRight size={17} />
-                                    </button>
-                                </div>
+                                        disabled={loadingRoster || !selectedBatchId}
+                                        aria-current={item === meta.current_page ? 'page' : undefined}
+                                        onClick={() => setPage(item)}
+                                        className={`grid h-8 min-w-8 place-items-center rounded-lg px-2 ${item === meta.current_page ? 'bg-[#1B365D] font-semibold text-white' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                                    >{item}</button>)}
+                                <button
+                                    type="button"
+                                    disabled={loadingRoster || meta.current_page >= meta.last_page}
+                                    onClick={() => setPage((current) => Math.min(meta.last_page, current + 1))}
+                                    aria-label="Next page"
+                                    className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-500 disabled:text-slate-300"
+                                >
+                                    <ChevronRight size={16} />
+                                </button>
                             </div>
-                        )}
+                        </footer>
                     </section>
 
                     <Dialog

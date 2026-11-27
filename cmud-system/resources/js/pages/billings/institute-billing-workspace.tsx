@@ -32,6 +32,7 @@ import {
 import { ApiRequestError, useApi } from '@/hooks/use-api';
 import AppLayout from '@/layouts/app-layout';
 import type { Auth } from '@/types/auth';
+import BillingPagination from './components/billing-pagination';
 
 type BillLine = {
     item_name: string;
@@ -1079,37 +1080,7 @@ export default function InstituteBillingWorkspace() {
                                 </tbody>
                             </table>
                         </div>
-                        <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3 text-xs text-slate-600">
-                            <span>
-                                Page {page} of {lastPage}
-                            </span>
-                            <div className="flex gap-2">
-                                <button
-                                    type="button"
-                                    disabled={page <= 1 || loading}
-                                    onClick={() =>
-                                        setPage((current) =>
-                                            Math.max(1, current - 1),
-                                        )
-                                    }
-                                    className="rounded-lg border border-slate-200 px-3 py-2 disabled:opacity-50"
-                                >
-                                    Previous
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={page >= lastPage || loading}
-                                    onClick={() =>
-                                        setPage((current) =>
-                                            Math.min(lastPage, current + 1),
-                                        )
-                                    }
-                                    className="rounded-lg border border-slate-200 px-3 py-2 disabled:opacity-50"
-                                >
-                                    Next
-                                </button>
-                            </div>
-                        </div>
+                        <BillingPagination page={page} lastPage={lastPage} perPage={15} total={totalRecords} loading={loading} recordLabel="billing records" onPageChange={setPage} />
                     </section>
                 </div>
             </main>

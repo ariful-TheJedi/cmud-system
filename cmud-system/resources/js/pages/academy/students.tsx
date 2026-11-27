@@ -254,7 +254,7 @@ export default function Students() {
         to: null,
     });
     const [page, setPage] = useState(1);
-    const [perPage, setPerPage] = useState(15);
+    const perPage = 15;
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
     const [search, setSearch] = useState('');
@@ -610,11 +610,6 @@ export default function Students() {
                         <div className="flex flex-col justify-between gap-3 border-t border-slate-100 px-5 py-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:px-6">
                             <span>Showing <strong className="text-slate-700">{pagination.from ?? 0}–{pagination.to ?? 0}</strong> of <strong className="text-slate-700">{pagination.total}</strong> student records</span>
                             <div className="flex flex-wrap items-center gap-2">
-                                <label className="flex items-center gap-2">Per page
-                                    <select value={perPage} onChange={(event) => { setPerPage(Number(event.target.value)); setPage(1); }} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-600">
-                                        {[15, 30, 50, 100].map((size) => <option key={size} value={size}>{size}</option>)}
-                                    </select>
-                                </label>
                                 <div className="flex items-center gap-1" aria-label="Student record pages">
                                     <button type="button" disabled={loading || pagination.current_page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} aria-label="Previous page" className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-500 disabled:text-slate-300"><ChevronLeft size={16} /></button>
                                     {paginationItems(pagination.current_page, pagination.last_page).map((item, index) => item === '…'

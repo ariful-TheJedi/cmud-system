@@ -1,6 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import { BookOpen, BriefcaseBusiness, CalendarDays, Check, ChevronLeft, ChevronRight, Eye, GraduationCap, Layers3, LoaderCircle, Pencil, Plus, Search, Settings2, Trash2, Users, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 
@@ -8,13 +8,14 @@ type InstituteOption = { id: number; name: string };
 type BranchOption = { id: number; institute_id: number; name: string };
 type CourseOption = { id: number; code: string; name: string; institute_id?: number };
 type PickerOption = { id: number; name: string; code?: string; course?: Pick<CourseOption, 'name' | 'code'> };
-type SubjectOption = { id: number; code: string; name: string; course_id?: number; course?: CourseOption };
-type CourseRecord = CourseOption & { institute_id: number; description: string | null; duration_months: number; completion_period_months: number; course_mode: string; is_active: boolean; institute?: InstituteOption; subjects: SubjectOption[]; batches: BatchRecord[] };
-type BatchRecord = { id: number; course_id: number; branch_id: number; code: string; name: string; admission_opens_on?: string | null; admission_closes_on?: string | null; starts_on: string; expected_ends_on: string; actual_ends_on?: string | null; status: string; capacity: number | null; course?: CourseOption; branch?: BranchOption };
-type SubjectRecord = SubjectOption & { course_id: number | null; description: string | null; is_active: boolean; teachers?: Array<{ id: number; full_name: string }> };
+type SubjectOption = { id: number; code: string; name: string; courses?: CourseOption[]; course_stages?: Array<{ id: number; code: string; name: string; course?: CourseOption }> };
+type CourseStageRecord = { id: number; code: string; name: string; sequence_number: number; duration_months: number; certificate_enabled: boolean; requires_exam: boolean; subjects: SubjectOption[] };
+type CourseRecord = CourseOption & { institute_id: number; description: string | null; duration_months: number; completion_period_months: number; course_mode: string; is_active: boolean; institute?: InstituteOption; subjects: SubjectOption[]; stages?: CourseStageRecord[]; batches: BatchRecord[] };
+type BatchRecord = { id: number; course_id: number; branch_id: number; code: string; name: string; admission_opens_on?: string | null; admission_closes_on?: string | null; starts_on: string; expected_ends_on: string; actual_ends_on?: string | null; status: string; capacity: number | null; enrolled_students_count?: number; course?: CourseOption; branch?: BranchOption };
+type SubjectRecord = SubjectOption & { description: string | null; is_active: boolean; teachers?: Array<{ id: number; full_name: string }> };
 type SubjectAssignment = { subject_id: number; teaching_role: string; is_active: boolean; notes: string };
 type TeacherRecord = { id: number; institute_id: number; stuff_id: number | null; teacher_code: string; full_name: string; phone: string; email: string | null; qualification: string | null; specialization: string | null; designation: string | null; organization: string | null; bmdc_number: string | null; address: string | null; photo_path: string | null; is_active: boolean; notes: string | null; institute?: InstituteOption; subjects: Array<SubjectOption & { pivot: { teaching_role: string | null; is_active: boolean; notes: string | null } }>; branches: BranchOption[] };
-type PageData<T> = { data: T[]; current_page: number; last_page: number; total: number };
+type PageData<T> = { data: T[]; current_page: number; last_page: number; from: number | null; to: number | null; total: number };
 type Section = 'courses' | 'batches' | 'subjects' | 'teachers';
 type FormState = Record<string, unknown>;
 
@@ -33,6 +34,31 @@ const sectionLabels: Record<Section, string> = {
     subjects: 'subject or module',
     teachers: 'teacher',
 };
+
+/** Keep numbered pagination compact on large Academy catalog lists. */
+function paginationItems(currentPage: number, lastPage: number): Array<number | '…'> {
+    const visiblePageCount = 5;
+
+    if (lastPage <= visiblePageCount + 1) {
+        return Array.from({ length: lastPage }, (_, index) => index + 1);
+    }
+
+    const start = Math.min(Math.max(1, currentPage - Math.floor(visiblePageCount / 2)), lastPage - visiblePageCount + 1);
+    const end = start + visiblePageCount - 1;
+    const items: Array<number | '…'> = [];
+
+    if (start > 1) {
+        items.push(1);
+        if (start > 2) items.push('…');
+    }
+    for (let pageNumber = start; pageNumber <= end; pageNumber += 1) items.push(pageNumber);
+    if (end < lastPage) {
+        if (end < lastPage - 1) items.push('…');
+        items.push(lastPage);
+    }
+
+    return items;
+}
 
 async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
     const response = await fetch(url, {
@@ -58,11 +84,11 @@ async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
 function createForm(section: Section): FormState {
     switch (section) {
         case 'courses':
-            return { institute_id: '', code: '', name: '', description: '', duration_months: 1, completion_period_months: 1, course_mode: 'offline', is_active: true };
+            return { institute_id: '', code: '', name: '', description: '', duration_months: 1, completion_period_months: 1, course_duration: 1, course_duration_unit: 'months', course_validity: 1, course_validity_unit: 'months', structure_type: 'semesters', stages: [{ name: 'Semester 1', duration: 1, duration_unit: 'months', subject_ids: [] }], subject_ids: [], course_mode: 'offline', is_active: true };
         case 'batches':
             return { course_id: '', branch_id: '', code: '', name: '', admission_opens_on: '', admission_closes_on: '', starts_on: '', expected_ends_on: '', capacity: '', status: 'active', notes: '' };
         case 'subjects':
-            return { course_id: '', code: '', name: '', description: '', is_active: true };
+            return { code: '', name: '', description: '', is_active: true };
         case 'teachers':
             return { institute_id: '', teacher_code: '', full_name: '', phone: '', email: '', qualification: '', specialization: '', designation: '', organization: '', bmdc_number: '', address: '', is_active: true, notes: '', subject_assignments: [], branch_ids: [] };
     }
@@ -74,7 +100,7 @@ export default function CatalogPage({ section, institutes, branches }: Managemen
         { title: 'Academic management', href: '/academy/manage/courses' },
         { title, href: `/academy/manage/${section}` },
     ];
-    const [records, setRecords] = useState<PageData<CourseRecord | BatchRecord | SubjectRecord | TeacherRecord>>({ data: [], current_page: 1, last_page: 1, total: 0 });
+    const [records, setRecords] = useState<PageData<CourseRecord | BatchRecord | SubjectRecord | TeacherRecord>>({ data: [], current_page: 1, last_page: 1, from: null, to: null, total: 0 });
     const [courseOptions, setCourseOptions] = useState<CourseRecord[]>([]);
     const [subjectOptions, setSubjectOptions] = useState<SubjectRecord[]>([]);
     const [page, setPage] = useState(1);
@@ -83,14 +109,29 @@ export default function CatalogPage({ section, institutes, branches }: Managemen
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
     const [query, setQuery] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
     const [editor, setEditor] = useState<{ section: Section; id: number | null; form: FormState } | null>(null);
     const [viewRecord, setViewRecord] = useState<{ section: Section; record: CourseRecord | BatchRecord | SubjectRecord | TeacherRecord } | null>(null);
+    const [pendingCourseDelete, setPendingCourseDelete] = useState<{ id: number; label: string } | null>(null);
+    const [pendingSubjectDelete, setPendingSubjectDelete] = useState<{ id: number; label: string } | null>(null);
+    const [pendingBatchDelete, setPendingBatchDelete] = useState<{ id: number; courseId: number; label: string } | null>(null);
 
     // Fetch only the resource for the current page.
     const reload = useCallback(async (target: Section, page: number) => {
-        const result = await apiRequest<PageData<CourseRecord | BatchRecord | SubjectRecord | TeacherRecord>>(`/api/v1/academy-catalog/${target}?page=${page}`);
+        const search = target === 'subjects' && searchTerm.trim() ? `&search=${encodeURIComponent(searchTerm.trim())}` : '';
+        const result = await apiRequest<PageData<CourseRecord | BatchRecord | SubjectRecord | TeacherRecord>>(`/api/v1/academy-catalog/${target}?page=${page}&per_page=15${search}`);
         setRecords(result);
-    }, []);
+    }, [searchTerm]);
+
+    // Debounce module search so each keystroke does not send a separate request.
+    useEffect(() => {
+        const timeout = window.setTimeout(() => {
+            setSearchTerm(query);
+            setPage(1);
+        }, 300);
+
+        return () => window.clearTimeout(timeout);
+    }, [query]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -98,7 +139,8 @@ export default function CatalogPage({ section, institutes, branches }: Managemen
             setLoading(true);
             setError('');
             try {
-                const result = await apiRequest<PageData<CourseRecord | BatchRecord | SubjectRecord | TeacherRecord>>(`/api/v1/academy-catalog/${section}?page=${page}`, { signal: controller.signal });
+                const search = section === 'subjects' && searchTerm.trim() ? `&search=${encodeURIComponent(searchTerm.trim())}` : '';
+                const result = await apiRequest<PageData<CourseRecord | BatchRecord | SubjectRecord | TeacherRecord>>(`/api/v1/academy-catalog/${section}?page=${page}&per_page=15${search}`, { signal: controller.signal });
                 setRecords(result);
             } catch (requestError) {
                 if (requestError instanceof DOMException && requestError.name === 'AbortError') return;
@@ -109,18 +151,24 @@ export default function CatalogPage({ section, institutes, branches }: Managemen
         }
         void loadPage();
         return () => controller.abort();
-    }, [section, page]);
+    }, [section, page, searchTerm]);
 
     const currentRows = useMemo(() => {
+        if (section === 'subjects' || !query.trim()) return records.data;
+
         const normalizedQuery = query.trim().toLowerCase();
-        if (!normalizedQuery) return records.data;
         return records.data.filter((record) => JSON.stringify(record).toLowerCase().includes(normalizedQuery));
-    }, [records.data, query]);
+    }, [records.data, query, section]);
 
 
     async function loadCourseOptions() {
-        const page = await apiRequest<PageData<CourseRecord>>('/api/v1/academy-catalog/courses?per_page=500');
-        setCourseOptions(page.data);
+        const firstPage = await apiRequest<PageData<CourseRecord>>('/api/v1/academy-catalog/courses?page=1&per_page=100');
+        const remainingPages = await Promise.all(
+            Array.from({ length: Math.max(0, firstPage.last_page - 1) }, (_, index) =>
+                apiRequest<PageData<CourseRecord>>(`/api/v1/academy-catalog/courses?page=${index + 2}&per_page=100`),
+            ),
+        );
+        setCourseOptions([...firstPage.data, ...remainingPages.flatMap((page) => page.data)]);
     }
 
     async function loadSubjectOptions() {
@@ -137,7 +185,14 @@ export default function CatalogPage({ section, institutes, branches }: Managemen
                 setError(requestError instanceof Error ? requestError.message : 'Could not load modules for teacher assignments.');
                 return;
             }
-        } else if (section === 'subjects' || section === 'batches') {
+        } else if (section === 'courses') {
+            try {
+                await Promise.all([loadCourseOptions(), loadSubjectOptions()]);
+            } catch (requestError) {
+                setError(requestError instanceof Error ? requestError.message : 'Could not load course setup options.');
+                return;
+            }
+        } else if (section === 'batches') {
             try {
                 await loadCourseOptions();
             } catch (requestError) {
@@ -156,14 +211,31 @@ export default function CatalogPage({ section, institutes, branches }: Managemen
             let form: FormState;
             if (section === 'courses') {
                 const course = data as CourseRecord;
-                form = { ...course };
+                await loadSubjectOptions();
+                const stages = course.stages ?? [];
+                form = {
+                    ...course,
+                    course_duration: course.duration_months,
+                    course_duration_unit: 'months',
+                    course_validity: course.completion_period_months,
+                    course_validity_unit: 'months',
+                    structure_type: stages.length ? 'semesters' : 'single',
+                    stages: stages.map((stage) => ({
+                        id: stage.id,
+                        name: stage.name,
+                        duration: stage.duration_months,
+                        duration_unit: 'months',
+                        certificate_enabled: stage.certificate_enabled,
+                        subject_ids: stage.subjects.map((subject) => subject.id),
+                    })),
+                    subject_ids: course.subjects.map((subject) => subject.id),
+                };
             } else if (section === 'batches') {
                 const batch = data as BatchRecord;
                 await loadCourseOptions();
                 form = { ...batch, admission_opens_on: dateOnly(batch.admission_opens_on), admission_closes_on: dateOnly(batch.admission_closes_on), starts_on: dateOnly(batch.starts_on), expected_ends_on: dateOnly(batch.expected_ends_on), actual_ends_on: dateOnly(batch.actual_ends_on), capacity: batch.capacity ?? '' };
             } else if (section === 'subjects') {
                 const subject = data as SubjectRecord;
-                await loadCourseOptions();
                 form = { ...subject };
             } else {
                 await loadSubjectOptions();
@@ -190,8 +262,8 @@ export default function CatalogPage({ section, institutes, branches }: Managemen
         }
     }
 
-    async function deleteRecord(id: number, label: string) {
-        if (!window.confirm(`Delete ${label}? This action cannot be undone.`)) return;
+    async function deleteRecord(id: number, label: string, confirm = true) {
+        if (confirm && !window.confirm(`Delete ${label}? This action cannot be undone.`)) return;
         setError('');
         setNotice('');
         try {
@@ -200,6 +272,25 @@ export default function CatalogPage({ section, institutes, branches }: Managemen
             await reload(section, page);
         } catch (requestError) {
             setError(requestError instanceof Error ? requestError.message : 'Could not delete this record.');
+        }
+    }
+
+    /** Delete a batch from its course editor, then refresh the parent course details. */
+    async function deleteCourseBatch(): Promise<void> {
+        if (!pendingBatchDelete) return;
+
+        const target = pendingBatchDelete;
+        setPendingBatchDelete(null);
+        setError('');
+        setNotice('');
+
+        try {
+            await apiRequest<{ message?: string }>(`/api/v1/academy-catalog/batches/${target.id}`, { method: 'DELETE' });
+            setNotice(`${target.label} deleted.`);
+            await reload('courses', page);
+            await openEdit(target.courseId);
+        } catch (requestError) {
+            setError(requestError instanceof Error ? requestError.message : 'Could not delete this batch.');
         }
     }
 
@@ -215,6 +306,14 @@ export default function CatalogPage({ section, institutes, branches }: Managemen
         setError('');
         setNotice('');
         try {
+            if (editor.section === 'courses' && editor.id === null) {
+                await createCourseFromDialog(editor.form);
+                setEditor(null);
+                setNotice('Course and selected structure created successfully.');
+                await reload('courses', page);
+                return;
+            }
+
             const payload = { ...editor.form };
             for (const numberField of ['institute_id', 'course_id', 'branch_id', 'duration_months', 'completion_period_months', 'capacity']) {
                 if (payload[numberField] === '') payload[numberField] = null;
@@ -225,6 +324,16 @@ export default function CatalogPage({ section, institutes, branches }: Managemen
                 method: editor.id ? 'PUT' : 'POST',
                 body: JSON.stringify(payload),
             });
+            if (editor.section === 'courses' && editor.id !== null && Array.isArray(payload.stages)) {
+                // Stage links are synchronized on the stage endpoint, keeping modules independent.
+                const stageAssignments = payload.stages as Array<{ id?: number; subject_ids?: number[] }>;
+                await Promise.all(stageAssignments.filter((stage) => stage.id !== undefined).map((stage) =>
+                    apiRequest(`/api/v1/academy-catalog/courses/${editor.id}/stages/${stage.id}`, {
+                        method: 'PUT',
+                        body: JSON.stringify({ subject_ids: stage.subject_ids ?? [] }),
+                    }),
+                ));
+            }
             setEditor(null);
             setNotice(result.message ?? `${sectionLabels[editor.section]} ${editor.id ? 'updated' : 'created'} successfully.`);
             await reload(editor.section, page);
@@ -232,6 +341,55 @@ export default function CatalogPage({ section, institutes, branches }: Managemen
             setError(requestError instanceof Error ? requestError.message : 'Could not save this record.');
         } finally {
             setSaving(false);
+        }
+    }
+
+    /** Create a course and attach existing reusable modules through course or stage pivots. */
+    async function createCourseFromDialog(form: FormState): Promise<void> {
+        const instituteId = Number(institutes[0]?.id);
+        if (!instituteId) throw new Error('No institute is available to own this course.');
+
+        const asMonths = (value: unknown, unit: unknown) => {
+            const amount = Number(value);
+            return Math.max(1, Math.ceil(unit === 'days' ? amount / 30 : amount));
+        };
+        const durationMonths = asMonths(form.course_duration, form.course_duration_unit);
+        const validityMonths = Math.max(durationMonths, asMonths(form.course_validity, form.course_validity_unit));
+        const courseResult = await apiRequest<{ data: CourseRecord }>('/api/v1/academy-catalog/courses', {
+            method: 'POST',
+            body: JSON.stringify({
+                institute_id: instituteId,
+                code: form.code,
+                name: form.name,
+                description: form.description || null,
+                duration_months: durationMonths,
+                completion_period_months: validityMonths,
+                course_mode: form.course_mode ?? 'offline',
+                status: form.is_active === false ? 'inactive' : 'active',
+                is_available_for_enrollment: form.is_active !== false,
+                subject_ids: form.structure_type === 'single' && Array.isArray(form.subject_ids) ? form.subject_ids : [],
+            }),
+        });
+        const course = courseResult.data;
+
+        const stages = form.structure_type === 'semesters' && Array.isArray(form.stages)
+            ? form.stages as Array<{ name: string; duration: number; duration_unit: string; subject_ids: number[] }>
+            : [];
+        for (const [index, stage] of stages.entries()) {
+            await apiRequest(`/api/v1/academy-catalog/courses/${course.id}/stages`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    code: `${String(form.code).slice(0, 235)}-SEM-${String(index + 1).padStart(2, '0')}`,
+                    name: stage.name,
+                    sequence_number: index + 1,
+                    duration_months: asMonths(stage.duration, stage.duration_unit),
+                    is_mandatory: true,
+                    requires_exam: true,
+                    certificate_enabled: index === 0 || index === stages.length - 1,
+                    is_active: true,
+                    subject_ids: stage.subject_ids,
+                }),
+            });
         }
     }
 
@@ -244,7 +402,7 @@ export default function CatalogPage({ section, institutes, branches }: Managemen
             <Head title={`${title} | CMUD`} />
             <main className="min-h-screen bg-[#F7F9FC] px-4 py-6 text-slate-800 sm:px-7 lg:px-10">
                 <div className="mx-auto max-w-7xl space-y-6">
-                    <header className="flex flex-col justify-between gap-4 rounded-3xl bg-gradient-to-r from-[#102D52] to-[#176C7A] p-6 text-white shadow-lg sm:flex-row sm:items-end sm:p-8">
+                    <header className="relative flex flex-col justify-between gap-4 rounded-3xl bg-gradient-to-r from-[#102D52] to-[#176C7A] p-6 text-white shadow-lg sm:flex-row sm:items-end sm:p-8">
                         <div>
                             <div className="mb-3 flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-cyan-100 uppercase"><Settings2 size={15} /> Academy workspace</div>
                             <div className="flex flex-wrap items-center gap-3">
@@ -253,16 +411,8 @@ export default function CatalogPage({ section, institutes, branches }: Managemen
                             </div>
                             <p className="mt-2 max-w-xl text-sm text-cyan-50/85">Manage {title.toLowerCase()} and their academic records.</p>
                         </div>
-                        <button type="button" onClick={openCreate} className="inline-flex h-11 items-center justify-center gap-2 self-start rounded-xl bg-white px-4 text-sm font-semibold text-[#153B5B] shadow-sm transition hover:bg-cyan-50 sm:self-auto"><Plus size={17} /> Add {sectionLabels[section]}</button>
+                        <button type="button" onClick={openCreate} className={`inline-flex h-11 items-center justify-center gap-2 self-start rounded-xl bg-white px-4 text-sm font-semibold text-[#153B5B] shadow-sm transition hover:bg-cyan-50 sm:self-center ${section === 'courses' ? 'sm:absolute sm:top-1/2 sm:right-8 sm:-translate-y-1/2' : ''}`}><Plus size={17} /> Add {section === 'courses' ? 'course' : sectionLabels[section]}</button>
                     </header>
-
-                    {section === 'subjects' && <nav aria-label="Academic management" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                        {sections.map(({ key, label, icon: Icon }) => <Link key={key} href={`/academy/manage/${key}`} aria-current={section === key ? 'page' : undefined} className={`flex items-center gap-4 rounded-2xl border p-4 text-left transition ${section === key ? 'border-[#167B87] bg-[#EFF9FA] shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}>
-                            <span className={`grid h-11 w-11 place-items-center rounded-xl ${section === key ? 'bg-[#D5EFF0] text-[#087586]' : 'bg-slate-100 text-slate-500'}`}><Icon size={19} /></span>
-                            <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-[#17375C]">{label}</span></span>
-                            {section === key && <span className="h-2 w-2 rounded-full bg-[#0D8996]" />}
-                        </Link>)}
-                    </nav>}
 
                     {error && <div role="alert" className="flex items-start justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="Dismiss error"><X size={16} /></button></div>}
                     {notice && <div role="status" className="flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"><span>{notice}</span><button type="button" onClick={() => setNotice('')} aria-label="Dismiss message"><X size={16} /></button></div>}
@@ -278,21 +428,30 @@ export default function CatalogPage({ section, institutes, branches }: Managemen
                                 <thead className="bg-slate-50 text-[10px] font-bold tracking-[0.12em] text-slate-400 uppercase"><tr>{tableHeaders(section).map((title) => <th key={title} className="px-5 py-3">{title}</th>)}<th className="px-5 py-3 text-right">Actions</th></tr></thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {loading ? <tr><td colSpan={6} className="px-5 py-14 text-center text-sm text-slate-500"><span className="inline-flex items-center gap-2"><LoaderCircle size={16} className="animate-spin" /> Loading records...</span></td></tr>
-                                        : currentRows.length ? currentRows.map((record) => <ManagementRow key={`${section}-${record.id}`} section={section} record={record} onView={() => void openView(record.id)} onEdit={() => void openEdit(record.id)} onDelete={() => void deleteRecord(record.id, recordLabel(section, record))} />)
+                                        : currentRows.length ? currentRows.map((record) => <ManagementRow key={`${section}-${record.id}`} section={section} record={record} onView={() => void openView(record.id)} onEdit={() => void openEdit(record.id)} onDelete={() => section === 'courses' ? setPendingCourseDelete({ id: record.id, label: recordLabel(section, record) }) : void deleteRecord(record.id, recordLabel(section, record))} />)
                                             : <tr><td colSpan={6} className="px-5 py-16 text-center"><span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-400"><Layers3 size={20} /></span><p className="mt-3 text-sm font-semibold text-[#17375C]">No {sectionLabels[section]} records found</p><p className="mt-1 text-xs text-slate-500">Add a record to get started, or adjust your search.</p></td></tr>}
                                 </tbody>
                             </table>
                         </div>
 
-                        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-4 text-xs text-slate-500 sm:px-6">
-                            <span>Page {records.current_page} of {records.last_page} · {records.total} total records</span>
-                            <div className="flex gap-2"><button type="button" disabled={loading || records.current_page <= 1} onClick={() => changePage(records.current_page - 1)} className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-600 disabled:text-slate-300" aria-label="Previous page"><ChevronLeft size={16} /></button><button type="button" disabled={loading || records.current_page >= records.last_page} onClick={() => changePage(records.current_page + 1)} className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-600 disabled:text-slate-300" aria-label="Next page"><ChevronRight size={16} /></button></div>
+                        <footer className="flex flex-col justify-between gap-3 border-t border-slate-100 px-5 py-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:px-6">
+                            <span>Showing <strong className="text-slate-700">{records.from ?? 0}–{records.to ?? 0}</strong> of <strong className="text-slate-700">{records.total}</strong> {sectionLabels[section]} records</span>
+                            <div className="flex items-center gap-1" aria-label="Academy record pages">
+                                <button type="button" disabled={loading || records.current_page <= 1} onClick={() => changePage(Math.max(1, records.current_page - 1))} aria-label="Previous page" className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-500 disabled:text-slate-300"><ChevronLeft size={16} /></button>
+                                {paginationItems(records.current_page, records.last_page).map((item, index) => item === '…'
+                                    ? <span key={`ellipsis-${index}`} className="px-1 text-slate-400" aria-hidden="true">…</span>
+                                    : <button key={item} type="button" disabled={loading} aria-current={item === records.current_page ? 'page' : undefined} onClick={() => changePage(item)} className={`grid h-8 min-w-8 place-items-center rounded-lg px-2 ${item === records.current_page ? 'bg-[#1B365D] font-semibold text-white' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{item}</button>)}
+                                <button type="button" disabled={loading || records.current_page >= records.last_page} onClick={() => changePage(Math.min(records.last_page, records.current_page + 1))} aria-label="Next page" className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-500 disabled:text-slate-300"><ChevronRight size={16} /></button>
+                            </div>
                         </footer>
                     </section>
                 </div>
             </main>
 
-            {editor && <EditorModal section={editor.section} id={editor.id} form={editor.form} institutes={institutes} branches={branches} courses={courseOptions} subjects={subjectOptions} saving={saving} error={error} onChange={changeField} onClose={() => setEditor(null)} onSubmit={submit} />}
+            {editor && <EditorModal section={editor.section} id={editor.id} form={editor.form} institutes={institutes} branches={branches} courses={courseOptions} subjects={subjectOptions} saving={saving} error={error} onChange={changeField} onClose={() => setEditor(null)} onDelete={editor.id === null ? undefined : editor.section === 'courses' ? () => setPendingCourseDelete({ id: editor.id!, label: String(editor.form.name ?? 'this course') }) : editor.section === 'subjects' ? () => setPendingSubjectDelete({ id: editor.id!, label: String(editor.form.name ?? 'this module') }) : undefined} onDeleteBatch={(batch) => editor.id !== null && setPendingBatchDelete({ id: batch.id, courseId: editor.id, label: batch.name })} onSubmit={submit} />}
+            {pendingCourseDelete && <ConfirmationModal title="Delete course?" message={`Delete “${pendingCourseDelete.label}”? This cannot be undone.`} confirmLabel="Delete course" onCancel={() => setPendingCourseDelete(null)} onConfirm={() => { const target = pendingCourseDelete; setPendingCourseDelete(null); setEditor(null); void deleteRecord(target.id, target.label, false); }} />}
+            {pendingSubjectDelete && <ConfirmationModal title="Delete module?" message={`Delete “${pendingSubjectDelete.label}”? Modules assigned to courses, stages, or teachers cannot be deleted.`} confirmLabel="Delete module" onCancel={() => setPendingSubjectDelete(null)} onConfirm={() => { const target = pendingSubjectDelete; setPendingSubjectDelete(null); setEditor(null); void deleteRecord(target.id, target.label, false); }} />}
+            {pendingBatchDelete && <ConfirmationModal title="Delete batch?" message={`Delete “${pendingBatchDelete.label}”? This cannot be undone. Batches with enrollments or academic records cannot be deleted.`} confirmLabel="Delete batch" onCancel={() => setPendingBatchDelete(null)} onConfirm={() => void deleteCourseBatch()} />}
             {viewRecord && <RecordDetailsModal section={viewRecord.section} record={viewRecord.record} onClose={() => setViewRecord(null)} />}
         </AppLayout>
     );
@@ -301,8 +460,8 @@ export default function CatalogPage({ section, institutes, branches }: Managemen
 function tableHeaders(section: Section): string[] {
     switch (section) {
         case 'courses': return ['Course', 'Institute', 'Duration', 'Modules', 'Status'];
-        case 'batches': return ['Batch', 'Course', 'Branch', 'Starts', 'Status'];
-        case 'subjects': return ['Module / subject', 'Code', 'Course', 'Status'];
+        case 'batches': return ['Batch', 'Course', 'Branch', 'Starts', 'Students / capacity', 'Status'];
+        case 'subjects': return ['Module / subject', 'Code', 'Status'];
         case 'teachers': return ['Teacher', 'Status', 'Phone', 'Modules / subjects', 'Branches'];
     }
 }
@@ -319,6 +478,16 @@ function dateOnly(value: string | null | undefined): string {
     return value ? value.slice(0, 10) : '';
 }
 
+/** Summarize the pivot assignments without implying that a module owns a course. */
+function subjectAssignmentLabels(subject: SubjectOption): string[] {
+    const courseLabels = (subject.courses ?? []).map((course) => course.name);
+    const stageLabels = (subject.course_stages ?? []).map((stage) =>
+        `${stage.course?.name ?? 'Course'} · ${stage.name}`,
+    );
+
+    return [...new Set([...courseLabels, ...stageLabels])];
+}
+
 function ManagementRow({ section, record, onView, onEdit, onDelete }: { section: Section; record: CourseRecord | BatchRecord | SubjectRecord | TeacherRecord; onView: () => void; onEdit: () => void; onDelete: () => void }) {
     const cells: ReactNode[] = [];
     if (section === 'courses') {
@@ -326,16 +495,18 @@ function ManagementRow({ section, record, onView, onEdit, onDelete }: { section:
         cells.push(<CellTitle key="title" title={course.name} subtitle={course.code} />, <span key="institute" className="text-sm text-slate-600">{course.institute?.name ?? '—'}</span>, <span key="duration" className="text-sm text-slate-600">{course.duration_months} mo · max {course.completion_period_months} mo</span>, <span key="modules" className="inline-flex items-center gap-1.5 text-sm text-slate-600"><BookOpen size={14} /> {course.subjects?.length ?? 0}</span>, <StatusBadge key="status" active={course.is_active} />);
     } else if (section === 'batches') {
         const batch = record as BatchRecord;
-        cells.push(<CellTitle key="title" title={batch.name} subtitle={batch.code} />, <span key="course" className="text-sm text-slate-600">{batch.course?.name ?? '—'}</span>, <span key="branch" className="text-sm text-slate-600">{batch.branch?.name ?? '—'}</span>, <span key="starts" className="text-sm text-slate-600">{batch.starts_on}</span>, <StatusBadge key="status" label={batch.status} active={batch.status === 'active' || batch.status === 'open'} />);
+        const capacity = batch.capacity === null ? 'Unlimited' : batch.capacity;
+        cells.push(<CellTitle key="title" title={batch.name} subtitle={batch.code} />, <span key="course" className="text-sm text-slate-600">{batch.course?.name ?? '—'}</span>, <span key="branch" className="text-sm text-slate-600">{batch.branch?.name ?? '—'}</span>, <span key="starts" className="text-sm text-slate-600">{batch.starts_on}</span>, <span key="enrollment-count" className="text-sm font-medium text-slate-700">{batch.enrolled_students_count ?? 0}<span className="text-slate-400"> / {capacity}</span></span>, <StatusBadge key="status" label={batch.status} active={batch.status === 'active' || batch.status === 'open'} />);
     } else if (section === 'subjects') {
         const subject = record as SubjectRecord;
-        cells.push(<CellTitle key="title" title={subject.name} subtitle={subject.description ?? 'Course module'} />, <span key="code" className="font-mono text-xs text-slate-600">{subject.code}</span>, <span key="course" className="text-sm text-slate-600">{subject.course?.name ?? 'Unassigned'}</span>, <StatusBadge key="status" active={subject.is_active} />);
+        cells.push(<CellTitle key="title" title={subject.name} subtitle={subject.description ?? 'Independent module'} />, <span key="code" className="font-mono text-xs text-slate-600">{subject.code}</span>, <StatusBadge key="status" active={subject.is_active} />);
     } else {
         const teacher = record as TeacherRecord;
         cells.push(<CellTitle key="title" title={teacher.full_name} subtitle={teacher.teacher_code} />, <StatusBadge key="status" active={teacher.is_active} />, <span key="phone" className="text-sm text-slate-600">{teacher.phone}</span>, <span key="subjects" className="text-sm text-slate-600">{teacher.subjects?.length ?? 0} modules / subjects</span>, <span key="branches" className="text-sm text-slate-600">{teacher.branches?.length ?? 0} branches</span>);
     }
 
-    return <tr className="transition hover:bg-slate-50/70">{cells.map((cell, index) => <td key={index} className="px-5 py-4">{cell}</td>)}<td className="px-5 py-4"><div className="flex justify-end gap-1"><button type="button" onClick={onView} aria-label="View record" className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-[#087586] hover:bg-cyan-50"><Eye size={14} /> View</button><button type="button" onClick={onEdit} aria-label="Edit record" className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-cyan-50 hover:text-[#087586]"><Pencil size={15} /></button><button type="button" onClick={onDelete} aria-label="Delete record" className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button></div></td></tr>;
+    const iconOnlyView = true;
+    return <tr className="transition hover:bg-slate-50/70">{cells.map((cell, index) => <td key={index} className="px-5 py-4">{cell}</td>)}<td className="px-5 py-4"><div className="flex justify-end gap-1"><button type="button" onClick={onView} aria-label="View record" title="View" className={`grid h-8 w-8 place-items-center rounded-lg text-[#087586] hover:bg-cyan-50 ${iconOnlyView ? '' : 'inline-flex gap-1 px-2 text-xs font-semibold'}`}><Eye size={14} />{!iconOnlyView && 'View'}</button><button type="button" onClick={onEdit} aria-label="Edit record" title="Edit" className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-cyan-50 hover:text-[#087586]"><Pencil size={15} /></button>{section !== 'courses' && section !== 'subjects' && <button type="button" onClick={onDelete} aria-label="Delete record" title="Delete" className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>}</div></td></tr>;
 }
 
 /** Read-only detail dialog showing the selected record and its linked records. */
@@ -346,10 +517,10 @@ function RecordDetailsModal({ section, record, onClose }: { section: Section; re
         details.push(['Course code', course.code], ['Name', course.name], ['Institute', course.institute?.name ?? '—'], ['Mode', course.course_mode], ['Duration', `${course.duration_months} months`], ['Completion period', `${course.completion_period_months} months`], ['Status', course.is_active ? 'Active' : 'Inactive'], ['Description', course.description || '—']);
     } else if (section === 'batches') {
         const batch = record as BatchRecord;
-        details.push(['Batch code', batch.code], ['Name', batch.name], ['Course', batch.course ? `${batch.course.name} (${batch.course.code})` : '—'], ['Branch', batch.branch?.name ?? '—'], ['Status', batch.status], ['Admission opens', dateOnly(batch.admission_opens_on) || '—'], ['Admission closes', dateOnly(batch.admission_closes_on) || '—'], ['Starts', dateOnly(batch.starts_on)], ['Expected end', dateOnly(batch.expected_ends_on)], ['Actual end', dateOnly(batch.actual_ends_on) || '—'], ['Capacity', batch.capacity?.toString() ?? '—']);
+        details.push(['Batch code', batch.code], ['Name', batch.name], ['Course', batch.course ? `${batch.course.name} (${batch.course.code})` : '—'], ['Branch', batch.branch?.name ?? '—'], ['Status', batch.status], ['Enrolled students', String(batch.enrolled_students_count ?? 0)], ['Capacity', batch.capacity?.toString() ?? 'Unlimited'], ['Admission opens', dateOnly(batch.admission_opens_on) || '—'], ['Admission closes', dateOnly(batch.admission_closes_on) || '—'], ['Starts', dateOnly(batch.starts_on)], ['Expected end', dateOnly(batch.expected_ends_on)], ['Actual end', dateOnly(batch.actual_ends_on) || '—']);
     } else if (section === 'subjects') {
         const subject = record as SubjectRecord;
-        details.push(['Module code', subject.code], ['Name', subject.name], ['Course', subject.course ? `${subject.course.name} (${subject.course.code})` : 'Unassigned'], ['Status', subject.is_active ? 'Active' : 'Inactive'], ['Description', subject.description || '—'], ['Assigned teachers', subject.teachers?.map((teacher) => teacher.full_name).join(', ') || 'None']);
+        details.push(['Module code', subject.code], ['Name', subject.name], ['Status', subject.is_active ? 'Active' : 'Inactive'], ['Description', subject.description || '—'], ['Assigned teachers', subject.teachers?.map((teacher) => teacher.full_name).join(', ') || 'None']);
     } else {
         const teacher = record as TeacherRecord;
         details.push(['Teacher code', teacher.teacher_code], ['Name', teacher.full_name], ['Institute', teacher.institute?.name ?? '—'], ['Phone', teacher.phone], ['Email', teacher.email || '—'], ['Qualification', teacher.qualification || '—'], ['Specialization', teacher.specialization || '—'], ['Designation', teacher.designation || '—'], ['Organization', teacher.organization || '—'], ['BMDC number', teacher.bmdc_number || '—'], ['Status', teacher.is_active ? 'Active' : 'Inactive'], ['Branches', teacher.branches?.map((branch) => branch.name).join(', ') || 'None'], ['Notes', teacher.notes || '—']);
@@ -359,6 +530,7 @@ function RecordDetailsModal({ section, record, onClose }: { section: Section; re
         <section role="dialog" aria-modal="true" aria-labelledby="academy-record-title" className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
             <header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-5"><div><p className="text-[10px] font-bold tracking-[0.15em] text-[#087586] uppercase">Academy record</p><h2 id="academy-record-title" className="mt-1 text-lg font-semibold text-[#17375C]">{recordLabel(section, record)}</h2></div><button type="button" onClick={onClose} aria-label="Close record details" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button></header>
             <dl className="grid gap-4 p-6 sm:grid-cols-2">{details.map(([label, value]) => <div key={label} className="min-w-0 rounded-xl border border-slate-100 bg-slate-50/70 p-3"><dt className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">{label}</dt><dd className="mt-1.5 break-words text-sm text-slate-700">{value}</dd></div>)}</dl>
+            {section === 'subjects' && <SubjectCourseAssignments subject={record as SubjectRecord} />}
             {section === 'courses' && <CourseRelationships course={record as CourseRecord} />}
             {section === 'teachers' && <TeacherSubjectAssignments teacher={record as TeacherRecord} />}
             <footer className="flex justify-end border-t border-slate-100 px-6 py-4"><button type="button" onClick={onClose} className="rounded-lg bg-[#17375C] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#254878]">Close</button></footer>
@@ -366,10 +538,29 @@ function RecordDetailsModal({ section, record, onClose }: { section: Section; re
     </div>;
 }
 
+/** Shows the reusable module's direct course links and semester/stage links in its view dialog. */
+function SubjectCourseAssignments({ subject }: { subject: SubjectRecord }) {
+    const courses = subject.courses ?? [];
+    const stages = subject.course_stages ?? [];
+    const hasAssignments = courses.length > 0 || stages.length > 0;
+
+    return <section aria-labelledby="subject-course-assignments-title" className="mx-6 mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <header className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+            <div className="flex items-center gap-2"><BookOpen size={16} className="text-[#087586]" /><h3 id="subject-course-assignments-title" className="text-sm font-semibold text-[#17375C]">Assigned courses and stages</h3></div>
+            <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-[#087586]">{new Set([...courses.map((course) => course.id), ...stages.map((stage) => stage.course?.id).filter((id): id is number => id !== undefined)]).size}</span>
+        </header>
+        {hasAssignments ? <div className="grid gap-4 p-4 sm:grid-cols-2">
+            {courses.length > 0 && <div><h4 className="mb-2 text-xs font-semibold text-slate-500">Direct course assignments</h4><ul className="space-y-2">{courses.map((course) => <li key={course.id} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"><p className="text-sm font-medium text-slate-700">{course.name}</p><p className="mt-0.5 font-mono text-[11px] text-slate-500">{course.code}</p></li>)}</ul></div>}
+            {stages.length > 0 && <div><h4 className="mb-2 text-xs font-semibold text-slate-500">Stage / semester assignments</h4><ul className="space-y-2">{stages.map((stage) => <li key={stage.id} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"><p className="text-sm font-medium text-slate-700">{stage.course?.name ?? 'Course'} · {stage.name}</p><p className="mt-0.5 font-mono text-[11px] text-slate-500">{stage.course?.code ?? 'Course code unavailable'} · {stage.code}</p></li>)}</ul></div>}
+        </div> : <p className="px-4 py-5 text-sm text-slate-500">This module is not currently assigned to a course or stage.</p>}
+    </section>;
+}
+
 /** Presents a course's linked modules and batches as separate, scannable lists. */
 function CourseRelationships({ course }: { course: CourseRecord }) {
-    const modules = course.subjects ?? [];
-    const batches = course.batches ?? [];
+    const stages = [...(course.stages ?? [])].sort((left, right) => left.sequence_number - right.sequence_number);
+    const modules = [...new Map([...(course.subjects ?? []), ...stages.flatMap((stage) => stage.subjects ?? [])].map((module) => [module.id, module])).values()];
+    const batches = (course.batches ?? []).filter((batch) => ['active', 'open', 'upcoming', 'ongoing'].includes(batch.status.toLowerCase()));
 
     return <div className="space-y-5 px-6 pb-6">
         <section aria-labelledby="course-modules-title" className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -377,7 +568,10 @@ function CourseRelationships({ course }: { course: CourseRecord }) {
                 <div className="flex items-center gap-2"><BookOpen size={16} className="text-[#087586]" /><h3 id="course-modules-title" className="text-sm font-semibold text-[#17375C]">Modules / subjects</h3></div>
                 <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-[#087586]">{modules.length}</span>
             </header>
-            {modules.length ? <ul className="divide-y divide-slate-100">{modules.map((module) => <li key={module.id} className="flex items-center justify-between gap-3 px-4 py-3"><span className="min-w-0 truncate text-sm font-medium text-slate-700">{module.name}</span><span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 font-mono text-[11px] text-slate-500">{module.code}</span></li>)}</ul> : <p className="px-4 py-5 text-sm text-slate-500">No modules or subjects are linked to this course yet.</p>}
+            {stages.length ? <div className="space-y-3 p-4">{stages.map((stage) => <section key={stage.id} className="rounded-xl border border-slate-200 bg-white">
+                <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/60 px-3 py-2.5"><div><h4 className="text-sm font-semibold text-[#17375C]">{stage.name}</h4><p className="mt-0.5 text-xs text-slate-500">{stage.duration_months} months · {stage.subjects.length} modules</p></div><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${stage.certificate_enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{stage.certificate_enabled ? 'Certificate available' : 'No certificate'}</span></header>
+                {stage.subjects.length ? <ul className="divide-y divide-slate-100">{stage.subjects.map((module) => <li key={module.id} className="flex items-center justify-between gap-3 px-3 py-2.5"><span className="min-w-0 truncate text-sm font-medium text-slate-700">{module.name}</span><span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 font-mono text-[11px] text-slate-500">{module.code}</span></li>)}</ul> : <p className="px-3 py-3 text-sm text-slate-500">No modules assigned to this semester.</p>}
+            </section>)}</div> : modules.length ? <ul className="divide-y divide-slate-100">{modules.map((module) => <li key={module.id} className="flex items-center justify-between gap-3 px-4 py-3"><span className="min-w-0 truncate text-sm font-medium text-slate-700">{module.name}</span><span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 font-mono text-[11px] text-slate-500">{module.code}</span></li>)}</ul> : <p className="px-4 py-5 text-sm text-slate-500">No modules or subjects are linked to this course yet.</p>}
         </section>
         <section aria-labelledby="course-batches-title" className="overflow-hidden rounded-xl border border-slate-200 bg-white">
             <header className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
@@ -386,23 +580,37 @@ function CourseRelationships({ course }: { course: CourseRecord }) {
             </header>
             {batches.length ? <ul className="divide-y divide-slate-100">{batches.map((batch) => <li key={batch.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0"><p className="truncate text-sm font-medium text-slate-700">{batch.name}</p><p className="mt-1 text-xs text-slate-500">{batch.code}{batch.branch?.name ? ` · ${batch.branch.name}` : ''}{batch.starts_on ? ` · Starts ${dateOnly(batch.starts_on)}` : ''}</p></div>
-                <div className="flex items-center gap-2"><span className="text-xs text-slate-500">{batch.capacity != null ? `${batch.capacity} seats` : ''}</span><StatusBadge label={batch.status} active={batch.status === 'active' || batch.status === 'open'} /></div>
+                <div className="flex items-center gap-2"><span className="text-xs text-slate-500">{batch.enrolled_students_count ?? 0} students / {batch.capacity != null ? `${batch.capacity} seats` : 'No capacity limit'}</span><StatusBadge label={batch.status} active={batch.status === 'active' || batch.status === 'open'} /></div>
             </li>)}</ul> : <p className="px-4 py-5 text-sm text-slate-500">No batches have been created for this course yet.</p>}
         </section>
     </div>;
 }
 
-/** Shows the modules assigned directly to a teacher, including each module's course. */
+/** Lists every course batch in the edit dialog and exposes its confirmed delete action. */
+function CourseBatchManager({ batches, onDelete }: { batches: BatchRecord[]; onDelete: (batch: BatchRecord) => void }) {
+    return <section aria-labelledby="course-batch-management-title" className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <header className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+            <div><h3 id="course-batch-management-title" className="text-sm font-semibold text-[#17375C]">Course batches</h3><p className="mt-1 text-xs text-slate-500">Delete a batch here. Batches with enrollments or academic records are protected.</p></div>
+            <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-[#087586]">{batches.length}</span>
+        </header>
+        {batches.length ? <ul className="divide-y divide-slate-100">{batches.map((batch) => <li key={batch.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <div className="min-w-0"><p className="truncate text-sm font-medium text-slate-700">{batch.name}</p><p className="mt-1 text-xs text-slate-500">{batch.code} · {batch.status} · {batch.enrolled_students_count ?? 0} enrolled · {batch.capacity == null ? 'No capacity limit' : `Capacity ${batch.capacity}`}</p></div>
+            <button type="button" onClick={() => onDelete(batch)} aria-label={`Delete batch ${batch.name}`} title="Delete batch" className="grid h-9 w-9 place-items-center rounded-lg text-rose-600 hover:bg-rose-50"><Trash2 size={16} /></button>
+        </li>)}</ul> : <p className="px-4 py-5 text-sm text-slate-500">No batches are assigned to this course.</p>}
+    </section>;
+}
+
+/** Shows the independent modules assigned to a teacher and their course placements. */
 function TeacherSubjectAssignments({ teacher }: { teacher: TeacherRecord }) {
     const assignedSubjects = teacher.subjects ?? [];
 
     return <section aria-labelledby="teacher-subject-assignments-title" className="px-6 pb-6">
         <div className="mb-3 flex items-center justify-between gap-3"><div><h3 id="teacher-subject-assignments-title" className="text-sm font-semibold text-[#17375C]">Assigned modules / subjects</h3><p className="mt-1 text-xs text-slate-500">These are the subjects assigned directly to this teacher.</p></div><span className="rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-[#087586]">{assignedSubjects.length} assigned</span></div>
-        {assignedSubjects.length ? <ul className="grid gap-3 sm:grid-cols-2">{assignedSubjects.map((subject) => <li key={subject.id} className="rounded-xl border border-slate-200 bg-white p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-700">{subject.name}</p><p className="mt-1 font-mono text-[11px] text-slate-500">{subject.code}</p><p className="mt-2 text-xs text-slate-500">Course: {subject.course?.name ?? 'Unassigned'}</p></div><StatusBadge label={subject.pivot.is_active ? 'Active' : 'Inactive'} active={subject.pivot.is_active} /></div>{subject.pivot.teaching_role && <p className="mt-3 text-xs text-slate-600">Teaching role: {subject.pivot.teaching_role}</p>}</li>)}</ul> : <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">No modules or subjects are assigned to this teacher.</p>}
+        {assignedSubjects.length ? <ul className="grid gap-3 sm:grid-cols-2">{assignedSubjects.map((subject) => <li key={subject.id} className="rounded-xl border border-slate-200 bg-white p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-700">{subject.name}</p><p className="mt-1 font-mono text-[11px] text-slate-500">{subject.code}</p><p className="mt-2 text-xs text-slate-500">Assigned in: {subjectAssignmentLabels(subject).join(', ') || 'No course or stage yet'}</p></div><StatusBadge label={subject.pivot.is_active ? 'Active' : 'Inactive'} active={subject.pivot.is_active} /></div>{subject.pivot.teaching_role && <p className="mt-3 text-xs text-slate-600">Teaching role: {subject.pivot.teaching_role}</p>}</li>)}</ul> : <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">No modules or subjects are assigned to this teacher.</p>}
     </section>;
 }
 
-function EditorModal({ section, id, form, institutes, branches, courses, subjects, saving, error, onChange, onClose, onSubmit }: { section: Section; id: number | null; form: FormState; institutes: InstituteOption[]; branches: BranchOption[]; courses: CourseRecord[]; subjects: SubjectOption[]; saving: boolean; error: string; onChange: (name: string, value: unknown) => void; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function EditorModal({ section, id, form, institutes, branches, courses, subjects, saving, error, onChange, onClose, onDelete, onDeleteBatch, onSubmit }: { section: Section; id: number | null; form: FormState; institutes: InstituteOption[]; branches: BranchOption[]; courses: CourseRecord[]; subjects: SubjectOption[]; saving: boolean; error: string; onChange: (name: string, value: unknown) => void; onClose: () => void; onDelete?: () => void; onDeleteBatch: (batch: BatchRecord) => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
     const title = `${id ? 'Edit' : 'Add'} ${sectionLabels[section]}`;
     const input = (name: string, label: string, type = 'text', required = false, extra: Record<string, string> = {}) => <FormInput key={name} name={name} label={label} type={type} required={required} value={form[name] == null ? '' : String(form[name])} extra={extra} onChange={(value) => onChange(name, type === 'number' ? (value === '' ? '' : Number(value)) : value)} />;
     const select = (name: string, label: string, options: Array<{ id: number | string; name: string }>, required = false, afterChange?: (value: string) => void, disabled = false) => <label key={name} className="block text-xs font-medium text-slate-600">{label}{required && <span className="ml-1 text-rose-500">*</span>}<select required={required} disabled={disabled} value={String(form[name] ?? '')} onChange={(event) => { const value = event.target.value; onChange(name, value ? Number(value) : ''); afterChange?.(value); }} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#16828D] disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"><option value="">Select {label.toLowerCase()}</option>{options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>;
@@ -435,19 +643,17 @@ function EditorModal({ section, id, form, institutes, branches, courses, subject
             <header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-5"><div><p className="text-[10px] font-bold tracking-[0.15em] text-[#087586] uppercase">Academy catalog</p><h2 id="academy-editor-title" className="mt-1 text-lg font-semibold text-[#17375C]">{title}</h2></div><button type="button" onClick={onClose} aria-label="Close form" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button></header>
             <form onSubmit={onSubmit} className="space-y-5 p-6">
                 {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p>}
-                {section === 'courses' && <div className="grid gap-4 sm:grid-cols-2">
-                    {select('institute_id', 'Institute', institutes, true)}{input('code', 'Course code', 'text', true)}{input('name', 'Course name', 'text', true)}{input('duration_months', 'Duration in months', 'number', true, { min: '1' })}{input('completion_period_months', 'Maximum completion in months', 'number', true, { min: '1' })}
-                    <SelectTextField label="Course mode" value={String(form.course_mode ?? 'offline')} options={['online', 'offline', 'dual']} onChange={(value) => onChange('course_mode', value)} />
-                    <div className="sm:col-span-2">{input('description', 'Description')}</div>
-                    <div className="sm:col-span-2"><BooleanField label="Course is active" checked={Boolean(form.is_active)} onChange={(checked) => onChange('is_active', checked)} /></div>
-                </div>}
+                {section === 'courses' && <>
+                    <CourseSetupForm form={form} institutes={institutes} subjects={subjects} select={select} input={input} onChange={onChange} toggleId={toggleId} />
+                    {id !== null && <CourseBatchManager batches={Array.isArray(form.batches) ? form.batches as BatchRecord[] : []} onDelete={onDeleteBatch} />}
+                </>}
                 {section === 'batches' && <div className="grid gap-4 sm:grid-cols-2">
-                    {select('course_id', 'Course', courses, true, () => onChange('branch_id', ''))}{select('branch_id', 'Branch', batchBranches, true, undefined, !selectedBatchCourse)}{input('code', 'Batch code', 'text', true)}{input('name', 'Batch name', 'text', true)}{input('admission_opens_on', 'Admission opens', 'date')}{input('admission_closes_on', 'Admission closes', 'date')}{input('starts_on', 'Starts on', 'date', true)}{input('expected_ends_on', 'Expected end date', 'date', true)}{input('actual_ends_on', 'Actual end date', 'date')}{input('capacity', 'Capacity', 'number', false, { min: '1' })}
-                    <SelectTextField label="Batch status" value={String(form.status ?? 'active')} options={['active', 'open', 'closed', 'completed', 'cancelled']} onChange={(value) => onChange('status', value)} />
+                    <div className="rounded-xl border border-cyan-100 bg-cyan-50/60 p-4 sm:col-span-2">{select('course_id', 'Assign batch to course', courses, true, () => onChange('branch_id', ''))}<p className="mt-2 text-xs text-slate-600">The batch belongs to this course. Its branch options are limited to the course’s institute.</p></div>{select('branch_id', 'Branch', batchBranches, true, undefined, !selectedBatchCourse)}{input('code', 'Batch code', 'text', true)}{input('name', 'Batch name', 'text', true)}{input('admission_opens_on', 'Admission opens', 'date')}{input('admission_closes_on', 'Admission closes', 'date')}{input('starts_on', 'Starts on', 'date', true)}{input('expected_ends_on', 'Expected end date', 'date', true)}{input('actual_ends_on', 'Actual end date', 'date')}{input('capacity', 'Student capacity (blank means unlimited)', 'number', false, { min: '1' })}
+                    <SelectTextField label="Batch status" value={String(form.status ?? 'active')} options={['active', 'open', 'upcoming', 'ongoing', 'inactive', 'completed', 'cancelled']} onChange={(value) => onChange('status', value)} />
                     <div className="sm:col-span-2">{input('notes', 'Notes')}</div>
                 </div>}
                 {section === 'subjects' && <div className="grid gap-4 sm:grid-cols-2">
-                    {select('course_id', 'Course', courses, true)}{input('code', 'Module code', 'text', true)}{input('name', 'Module / subject name', 'text', true)}<div className="sm:col-span-2">{input('description', 'Description')}</div>
+                    <p className="rounded-lg bg-cyan-50 px-3 py-2 text-xs text-cyan-900 sm:col-span-2">Modules are independent records. Assign them to courses or semesters from course setup.</p>{input('code', 'Module code', 'text', true)}{input('name', 'Module / subject name', 'text', true)}<div className="sm:col-span-2">{input('description', 'Description')}</div>
                     <SelectTextField label="Subject status" value={form.is_active === false ? 'inactive' : 'active'} options={['active', 'inactive']} onChange={(value) => onChange('is_active', value === 'active')} />
                 </div>}
                 {section === 'teachers' && <div className="grid gap-4 sm:grid-cols-2">
@@ -457,7 +663,7 @@ function EditorModal({ section, id, form, institutes, branches, courses, subject
                     {Array.isArray(form.subject_assignments) && (form.subject_assignments as SubjectAssignment[]).map((assignment) => {
                         const module = subjects.find((subject) => subject.id === assignment.subject_id);
                         return <div key={assignment.subject_id} className="sm:col-span-2 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
-                            <div className="sm:col-span-2"><p className="text-sm font-semibold text-slate-700">{module?.name ?? 'Selected module'}</p><p className="mt-1 text-xs text-slate-500">{module?.course?.name ?? 'Course unavailable'}{module?.code ? ` · ${module.code}` : ''}</p></div>
+                            <div className="sm:col-span-2"><p className="text-sm font-semibold text-slate-700">{module?.name ?? 'Selected module'}</p><p className="mt-1 text-xs text-slate-500">{module ? subjectAssignmentLabels(module).join(', ') || 'Independent module' : 'Module unavailable'}{module?.code ? ` · ${module.code}` : ''}</p></div>
                             <FormInput name={`teaching_role_${assignment.subject_id}`} label="Teaching role" type="text" required={false} value={assignment.teaching_role} extra={{}} onChange={(value) => updateTeacherSubject(assignment.subject_id, 'teaching_role', value)} />
                             <BooleanField label="Assignment is active" checked={assignment.is_active} onChange={(checked) => updateTeacherSubject(assignment.subject_id, 'is_active', checked)} />
                             <div className="sm:col-span-2"><FormInput name={`assignment_notes_${assignment.subject_id}`} label="Assignment notes" type="text" required={false} value={assignment.notes} extra={{}} onChange={(value) => updateTeacherSubject(assignment.subject_id, 'notes', value)} /></div>
@@ -465,8 +671,63 @@ function EditorModal({ section, id, form, institutes, branches, courses, subject
                     })}
                     <div className="sm:col-span-2"><BooleanField label="Teacher is active" checked={Boolean(form.is_active)} onChange={(checked) => onChange('is_active', checked)} /></div>
                 </div>}
-                <footer className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-200 bg-[#F8FAFC] pt-4"><button type="button" onClick={onClose} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</button><button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-[#17375C] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#254878] disabled:opacity-60">{saving && <LoaderCircle size={15} className="animate-spin" />}{saving ? 'Saving...' : id ? 'Save changes' : 'Create record'}</button></footer>
+                <footer className="sticky bottom-0 flex justify-between gap-2 border-t border-slate-200 bg-[#F8FAFC] pt-4">{onDelete ? <button type="button" onClick={onDelete} className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50"><Trash2 size={15} /> Delete {section === 'courses' ? 'course' : 'module'}</button> : <span /> }<div className="flex gap-2"><button type="button" onClick={onClose} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</button><button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-[#17375C] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#254878] disabled:opacity-60">{saving && <LoaderCircle size={15} className="animate-spin" />}{saving ? 'Saving...' : id ? 'Save changes' : 'Create record'}</button></div></footer>
             </form>
+        </section>
+    </div>;
+}
+
+/** UI-only course structure builder; these draft fields are not persisted yet. */
+function CourseSetupForm({ form, institutes, subjects, select, input, onChange, toggleId }: {
+    form: FormState;
+    institutes: InstituteOption[];
+    subjects: SubjectOption[];
+    select: (name: string, label: string, options: Array<{ id: number | string; name: string }>, required?: boolean) => ReactNode;
+    input: (name: string, label: string, type?: string, required?: boolean, extra?: Record<string, string>) => ReactNode;
+    onChange: (name: string, value: unknown) => void;
+    toggleId: (field: string, idValue: number, checked: boolean) => void;
+}) {
+    const stages = Array.isArray(form.stages) ? form.stages as Array<{ name: string; duration: number; duration_unit: string; subject_ids: number[] }> : [];
+        const modules = subjects;
+    const setStage = (index: number, patch: Partial<(typeof stages)[number]>) => onChange('stages', stages.map((stage, current) => current === index ? { ...stage, ...patch } : stage));
+    const durationField = (field: string, unitField: string, label: string) => <div className="grid grid-cols-[1fr_120px] gap-2">
+        <label className="block text-xs font-medium text-slate-600">{label}<input type="number" min="1" required value={String(form[field] ?? 1)} onChange={(event) => onChange(field, Number(event.target.value))} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm" /></label>
+        <SelectTextField label="Unit" value={String(form[unitField] ?? 'months')} options={['days', 'months']} onChange={(value) => onChange(unitField, value)} />
+    </div>;
+
+    return <div className="grid gap-5">
+        <div className="grid gap-4 sm:grid-cols-2">
+            {input('code', 'Course code', 'text', true)}{input('name', 'Course name', 'text', true)}
+            {durationField('course_duration', 'course_duration_unit', 'Course duration')}{durationField('course_validity', 'course_validity_unit', 'Course validity')}
+            <SelectTextField label="Course mode" value={String(form.course_mode ?? 'offline')} options={['online', 'offline', 'dual']} onChange={(value) => onChange('course_mode', value)} />
+            <div className="sm:col-span-2">{input('description', 'Description')}</div>
+        </div>
+        <section className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h3 className="text-sm font-semibold text-[#17375C]">Course structure</h3>
+            <p className="mt-1 text-xs text-slate-500">Choose semesters with reusable modules assigned to each, or assign modules directly to a course without semesters.</p>
+            <div className="mt-3 flex gap-2">{[['semesters', 'Multiple semesters'], ['single', 'No semesters']].map(([value, label]) => <button key={value} type="button" onClick={() => onChange('structure_type', value)} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${form.structure_type === value ? 'border-[#087586] bg-cyan-50 text-[#087586]' : 'border-slate-200 text-slate-600'}`}>{label}</button>)}</div>
+        </section>
+        {form.structure_type === 'semesters' ? <div className="space-y-3">
+            {stages.map((stage, index) => <section key={index} className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex items-center justify-between"><h4 className="text-sm font-semibold text-[#17375C]">Semester {index + 1}</h4>{stages.length > 1 && <button type="button" onClick={() => onChange('stages', stages.filter((_, current) => current !== index))} className="text-xs text-rose-600">Remove</button>}</div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2"><FormInput name={`stage-${index}`} label="Semester name" type="text" required value={stage.name} extra={{}} onChange={(value) => setStage(index, { name: value })} />
+                    <div className="grid grid-cols-[1fr_120px] gap-2"><FormInput name={`stage-duration-${index}`} label="Semester duration" type="number" required value={String(stage.duration)} extra={{ min: '1' }} onChange={(value) => setStage(index, { duration: Number(value) })} /><SelectTextField label="Unit" value={stage.duration_unit} options={['days', 'months']} onChange={(value) => setStage(index, { duration_unit: value })} /></div>
+                    <div className="sm:col-span-2"><CheckList title="Modules in this semester" options={modules} selected={stage.subject_ids} onToggle={(subjectId, checked) => setStage(index, { subject_ids: checked ? [...stage.subject_ids, subjectId] : stage.subject_ids.filter((id) => id !== subjectId) })} emptyText="No modules loaded. They can be assigned after the course is created." /></div>
+                </div>
+            </section>)}
+            <button type="button" onClick={() => onChange('stages', [...stages, { name: `Semester ${stages.length + 1}`, duration: 1, duration_unit: 'months', subject_ids: [] }])} className="rounded-lg border border-dashed border-[#087586]/50 px-3 py-2 text-xs font-semibold text-[#087586]">+ Add semester</button>
+        </div> : <CheckList title="Course modules / subjects" options={modules} selected={Array.isArray(form.subject_ids) ? form.subject_ids as number[] : []} onToggle={(id, checked) => toggleId('subject_ids', id, checked)} emptyText="No modules loaded. They can be assigned after the course is created." />}
+        <p className="rounded-lg bg-cyan-50 px-3 py-2 text-xs text-cyan-900">Module selection links existing modules to the course or semester. It does not create duplicate module records.</p>
+        <BooleanField label="Course is active" checked={Boolean(form.is_active)} onChange={(checked) => onChange('is_active', checked)} />
+    </div>;
+}
+
+function ConfirmationModal({ title, message, confirmLabel, onCancel, onConfirm }: { title: string; message: string; confirmLabel: string; onCancel: () => void; onConfirm: () => void }) {
+    return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[#10233B]/60 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
+        <section role="alertdialog" aria-modal="true" aria-labelledby="confirm-delete-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 id="confirm-delete-title" className="text-lg font-semibold text-[#17375C]">{title}</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{message}</p>
+            <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={onCancel} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</button><button type="button" onClick={onConfirm} className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700">{confirmLabel}</button></div>
         </section>
     </div>;
 }

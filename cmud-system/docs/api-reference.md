@@ -58,19 +58,19 @@ The Academy routes are registered from `app/Modules/Academy/routes/api.php`.
 
 ### Academy catalog: courses, batches, and subjects
 
-The catalog endpoints are implemented by `AcademyCatalogController` and delegate persistence to `AcademyCatalogService`. `subjects` are course modules: each module belongs to one course through `subjects.course_id`. Teachers and modules have a many-to-many relationship through `subject_teacher`; courses have no direct teacher assignment. All these routes currently use only the standard `api` middleware; no route-level authentication middleware is declared.
+The catalog endpoints are implemented by `AcademyCatalogController` and delegate persistence to `AcademyCatalogService`. Subjects are independent reusable modules. Course assignments live in `course_subject`, stage assignments live in `course_stage_subject`, and teacher assignments live in `subject_teacher`. All these routes currently use only the standard `api` middleware; no route-level authentication middleware is declared.
 
 #### Courses
 
-- `GET /api/v1/academy-catalog/courses` returns a paginated list (25 per page) with institute, subject, and batch summaries.
+- `GET /api/v1/academy-catalog/courses` returns a paginated list (15 per page) with institute, subject, stage, and batch summaries.
 - `GET /api/v1/academy-catalog/courses/{course}` returns one course with its institute, subjects, and batches. Unknown IDs return `404`.
-- `POST /api/v1/academy-catalog/courses` creates a course. Required fields: `institute_id` (existing institute), `code`, `name`, positive `duration_months`, positive `completion_period_months`, and `course_mode` (`online`, `offline`, or `dual`). Optional fields: `description` and `is_active`. Success returns `201` with the course and its modules under `data`.
-- `PUT /api/v1/academy-catalog/courses/{course}` updates supplied course fields. Module ownership is managed on the subject endpoints through `course_id`. Success returns the updated course and modules under `data`.
+- `POST /api/v1/academy-catalog/courses` creates a course. Required fields: `institute_id` (existing institute), `code`, `name`, positive `duration_months`, positive `completion_period_months`, and `course_mode` (`online`, `offline`, or `dual`). Optional fields: `description`, `is_active`, and `subject_ids` for direct module assignments when the course has no stages. Success returns `201` with the course and its modules under `data`.
+- `PUT /api/v1/academy-catalog/courses/{course}` updates supplied course fields and optional direct `subject_ids`. Stage module assignments are managed through the nested stage endpoints. Success returns the updated course and its direct modules under `data`.
 - `DELETE /api/v1/academy-catalog/courses/{course}` deletes a course only when it has no dependent stages, batches, enrollments, certificate templates, communication groups, price versions, student-expense price versions, or modules. In-use courses return `409`; successful deletion returns `200` with a message.
 
 #### Batches
 
-- `GET /api/v1/academy-catalog/batches` returns a paginated list (25 per page) with course and branch summaries.
+- `GET /api/v1/academy-catalog/batches` returns a paginated list (15 per page) with course and branch summaries.
 - `GET /api/v1/academy-catalog/batches/{batch}` returns one batch with its course and branch. Unknown IDs return `404`.
 - `POST /api/v1/academy-catalog/batches` creates a batch. Required fields: `course_id`, `branch_id`, `code`, `name`, `starts_on`, `expected_ends_on` (on or after start), and `status`. Optional fields: `admission_opens_on`, `admission_closes_on` (on or after opening date), `actual_ends_on`, `capacity` (positive integer), and `notes`. The course and branch must exist, and the branch must belong to the same institute as the selected course. Success returns `201` with the created record under `data`.
 - `PUT /api/v1/academy-catalog/batches/{batch}` updates supplied fields with the same validation rules, including checking the resulting course/branch pair, and returns the updated record under `data`.
@@ -78,11 +78,11 @@ The catalog endpoints are implemented by `AcademyCatalogController` and delegate
 
 #### Subjects (course modules/topics)
 
-- `GET /api/v1/academy-catalog/subjects` returns a paginated list (25 per page) with the owning course summary.
-- `GET /api/v1/academy-catalog/subjects/{subject}` returns one module with its course and assigned teachers. Unknown IDs return `404`.
-- `POST /api/v1/academy-catalog/subjects` creates a module. Required fields: `course_id` (existing course), unique `code`, and `name`. Optional fields: `description` and `is_active`. Success returns `201` with the module under `data`.
-- `PUT /api/v1/academy-catalog/subjects/{subject}` updates supplied fields, including its single `course_id`. Success returns the updated module under `data`.
-- `DELETE /api/v1/academy-catalog/subjects/{subject}` deletes the module and its teacher assignment rows, returning `200` with a message.
+- `GET /api/v1/academy-catalog/subjects` returns a paginated list (15 per page) with course and stage assignment summaries.
+- `GET /api/v1/academy-catalog/subjects/{subject}` returns one independent module with its course, stage, and teacher assignments. Unknown IDs return `404`.
+- `POST /api/v1/academy-catalog/subjects` creates a module. Required fields: unique `code` and `name`. Optional fields: `description` and `is_active`. Success returns `201` with the module under `data`.
+- `PUT /api/v1/academy-catalog/subjects/{subject}` updates the module's own fields; assignment management is handled by course and stage endpoints.
+- `DELETE /api/v1/academy-catalog/subjects/{subject}` deletes an unassigned module. Assigned modules return `409`; successful deletion returns `200` with a message.
 
 Create/update validation errors return `422`. Collection routes return Laravel paginator links and metadata. No route-level authentication middleware is declared on these catalog routes.
 

@@ -33,6 +33,8 @@ class CourseRequest extends FormRequest
             'status' => [$required, Rule::enum(CourseStatus::class)],
             'is_available_for_enrollment' => ['sometimes', 'boolean'],
             'is_active' => ['sometimes', 'boolean'],
+            'subject_ids' => ['sometimes', 'array'],
+            'subject_ids.*' => ['integer', 'distinct', 'exists:subjects,id'],
         ];
     }
 

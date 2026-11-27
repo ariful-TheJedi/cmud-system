@@ -5,6 +5,7 @@ namespace App\Models\Academy;
 use App\Models\Finance\StudentExpensePriceVersion;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CourseStage extends Model
@@ -19,6 +20,7 @@ class CourseStage extends Model
         'is_active',
         'is_mandatory',
         'requires_exam',
+        'certificate_enabled',
     ];
 
     protected function casts(): array
@@ -29,6 +31,7 @@ class CourseStage extends Model
             'is_active' => 'boolean',
             'is_mandatory' => 'boolean',
             'requires_exam' => 'boolean',
+            'certificate_enabled' => 'boolean',
         ];
     }
 
@@ -42,6 +45,12 @@ class CourseStage extends Model
     public function studentStageRecords(): HasMany
     {
         return $this->hasMany(StudentStageRecord::class);
+    }
+
+    /** @return BelongsToMany<Subject, $this> */
+    public function subjects(): BelongsToMany
+    {
+        return $this->belongsToMany(Subject::class, 'course_stage_subject')->withTimestamps();
     }
 
     /** @return HasMany<StudentExpensePriceVersion, $this> */

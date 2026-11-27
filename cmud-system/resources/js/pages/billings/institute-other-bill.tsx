@@ -1,9 +1,10 @@
 import AppLayout from '@/layouts/app-layout';
 import { useApi } from '@/hooks/use-api';
 import { Head, usePage } from '@inertiajs/react';
-import { CalendarDays, ChevronLeft, ChevronRight, Eye, FilterX, Pencil, Plus, Printer, ReceiptText, Search, Trash2, X } from 'lucide-react';
+import { CalendarDays, Eye, FilterX, Pencil, Plus, Printer, ReceiptText, Search, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import PrintableInstituteOtherBill, { type InstituteOtherBillPrintHeader } from './components/printable-institute-other-bill';
+import BillingPagination from './components/billing-pagination';
 
 type BillItem = {
     description: string;
@@ -275,7 +276,7 @@ export default function InstituteOtherBillPage() {
                 <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">Bill number</th><th className="px-4 py-3">Organization</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Total</th><th className="px-4 py-3">Status</th><th className="px-4 py-3 text-right">Actions</th></tr></thead><tbody className="divide-y divide-slate-100">
                     {loading ? <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-500">Loading bills…</td></tr> : rows.length === 0 ? <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-500">No institute bills match these filters.</td></tr> : rows.map((bill) => <tr key={bill.id} className="hover:bg-slate-50/70"><td className="px-4 py-3 font-mono text-xs text-slate-700">{bill.bill_number}</td><td className="px-4 py-3 font-medium text-slate-800">{bill.university_name}</td><td className="px-4 py-3 text-slate-600">{bill.bill_date}</td><td className="px-4 py-3 font-semibold text-slate-800">{money(bill.total_amount)}</td><td className="px-4 py-3"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium capitalize text-slate-700">{bill.status.replaceAll('_', ' ')}</span></td><td className="px-4 py-3"><div className="flex justify-end gap-1"><button type="button" title="View and print" aria-label="View and print bill" onClick={() => void openBill(bill)} className="inline-flex items-center gap-1 rounded-md px-2 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900"><Eye size={15} /></button><button type="button" title="Update bill" aria-label="Update bill" onClick={() => openEdit(bill)} className="inline-flex items-center gap-1 rounded-md px-2 py-2 text-xs font-semibold text-[#17375C] hover:bg-blue-50"><Pencil size={15} /></button></div></td></tr>)}
                 </tbody></table></div>
-                <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500"><span>Page {meta.current_page} of {Math.max(meta.last_page, 1)}</span><div className="flex gap-2"><button disabled={page <= 1} onClick={() => setPage((current) => current - 1)} className="rounded-md border border-slate-200 p-2 disabled:opacity-40"><ChevronLeft size={16} /></button><button disabled={page >= meta.last_page} onClick={() => setPage((current) => current + 1)} className="rounded-md border border-slate-200 p-2 disabled:opacity-40"><ChevronRight size={16} /></button></div></div>
+                <BillingPagination page={meta.current_page} lastPage={meta.last_page} perPage={meta.per_page} total={meta.total} loading={loading} recordLabel="institute bills" onPageChange={setPage} />
             </section>
         </div>
         </main>

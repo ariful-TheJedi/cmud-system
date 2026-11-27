@@ -173,7 +173,7 @@ class StudentEnrollmentRulesTest extends TestCase
 
     public function test_it_rejects_completed_and_cancelled_batches(): void
     {
-        foreach (['completed', 'cancelled'] as $status) {
+        foreach (['completed', 'cancelled', 'inactive'] as $status) {
             $this->batch->update(['status' => $status]);
 
             $this->postEnrollment()
@@ -281,6 +281,59 @@ class StudentEnrollmentRulesTest extends TestCase
         $this->assertDatabaseMissing('students', [
             'student_code' => 'STU-ENROLLMENT-RULES-NEW',
         ]);
+    }
+
+    public function test_batch_catalog_displays_enrolled_student_count_and_course_assignment(): void
+    {
+        $this->postEnrollment()->assertCreated();
+
+        $batchResponse = $this->postJson('/api/v1/academy-catalog/batches', [
+            'course_id' => $this->course->id,
+            'branch_id' => $this->branch->id,
+            'code' => 'ENROLLMENT-RULES-ASSIGNED-BATCH',
+            'name' => 'Assigned Course Batch',
+            'starts_on' => '2026-12-01',
+            'expected_ends_on' => '2027-12-01',
+            'capacity' => null,
+            'status' => 'open',
+        ])->assertCreated()
+            ->assertJsonPath('data.course_id', $this->course->id)
+            ->assertJsonPath('data.capacity', null);
+
+        $response = $this->getJson('/api/v1/academy-catalog/batches?per_page=15')->assertOk();
+
+        $response->assertJsonFragment([
+            'id' => $this->batch->id,
+            'course_id' => $this->course->id,
+            'enrolled_students_count' => 1,
+        ]);
+        $this->getJson('/api/v1/academy-catalog/batches/'.$batchResponse->json('data.id'))
+            ->assertOk()
+            ->assertJsonPath('data.course.id', $this->course->id)
+            ->assertJsonPath('data.enrolled_students_count', 0);
+    }
+
+    public function test_an_unused_batch_can_be_deleted_but_an_enrolled_batch_is_protected(): void
+    {
+        $this->postJson('/api/v1/academy-catalog/batches', [
+            'course_id' => $this->course->id,
+            'branch_id' => $this->branch->id,
+            'code' => 'ENROLLMENT-RULES-DELETE-BATCH',
+            'name' => 'Unused Batch',
+            'starts_on' => '2026-12-01',
+            'expected_ends_on' => '2027-12-01',
+            'status' => 'open',
+        ])->assertCreated();
+
+        $deletableBatch = Batch::query()->where('code', 'ENROLLMENT-RULES-DELETE-BATCH')->firstOrFail();
+        $this->deleteJson('/api/v1/academy-catalog/batches/'.$deletableBatch->id)->assertOk();
+        $this->assertDatabaseMissing('batches', ['id' => $deletableBatch->id]);
+
+        $this->postEnrollment()->assertCreated();
+        $this->deleteJson('/api/v1/academy-catalog/batches/'.$this->batch->id)
+            ->assertConflict()
+            ->assertJsonPath('message', 'This batch is in use and cannot be deleted.');
+        $this->assertDatabaseHas('batches', ['id' => $this->batch->id]);
     }
 
     private function postEnrollment(

@@ -26,10 +26,10 @@ class SubjectRequest extends FormRequest
                 'max:255',
                 Rule::unique('subjects', 'code')->ignore($subject instanceof Subject ? $subject->id : null),
             ],
-            'course_id' => [$required, 'integer', 'exists:courses,id'],
             'name' => [$required, 'string', 'max:255'],
             'description' => ['sometimes', 'nullable', 'string'],
             'is_active' => ['sometimes', 'boolean'],
         ];
     }
+
 }

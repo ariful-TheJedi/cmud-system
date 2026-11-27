@@ -54,6 +54,12 @@ class Batch extends Model
         return $this->hasMany(Enrollment::class);
     }
 
+    /** Return the students who currently occupy a batch place for capacity reporting. */
+    public function currentlyEnrolledStudents(): HasMany
+    {
+        return $this->enrollments()->whereIn('status', ['enrolled', 'ongoing', 'on_hold']);
+    }
+
     /** @return HasMany<StudentStageRecord, $this> */
     public function studentStageRecords(): HasMany
     {

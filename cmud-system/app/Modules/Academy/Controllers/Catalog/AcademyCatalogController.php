@@ -96,7 +96,7 @@ class AcademyCatalogController extends Controller
 
     public function batches(Request $request, AcademyCatalogService $catalog): JsonResponse
     {
-        return response()->json($catalog->batches());
+        return response()->json($catalog->batches($this->perPage($request)));
     }
 
     public function showBatch(Batch $batch, AcademyCatalogService $catalog): JsonResponse
@@ -128,12 +128,21 @@ class AcademyCatalogController extends Controller
 
     public function subjects(Request $request, AcademyCatalogService $catalog): JsonResponse
     {
-        return response()->json($catalog->subjects($this->perPage($request)));
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        return response()->json($catalog->subjects($this->perPage($request), $filters['search'] ?? null));
     }
 
     public function showSubject(Subject $subject): JsonResponse
     {
-        return response()->json(['data' => $subject->load(['course:id,code,name', 'teachers:id,teacher_code,full_name'])]);
+        return response()->json(['data' => $subject->load([
+            'courses:id,code,name',
+            'courseStages:id,course_id,code,name,sequence_number',
+            'courseStages.course:id,code,name',
+            'teachers:id,teacher_code,full_name',
+        ])]);
     }
 
     public function storeSubject(SubjectRequest $request, AcademyCatalogService $catalog): JsonResponse
@@ -151,13 +160,15 @@ class AcademyCatalogController extends Controller
 
     public function destroySubject(Subject $subject, AcademyCatalogService $catalog): JsonResponse
     {
-        $catalog->deleteSubject($subject);
+        if (! $catalog->deleteSubject($subject)) {
+            return response()->json(['message' => 'This module is assigned to a course, stage, or teacher and cannot be deleted.'], 409);
+        }
 
         return response()->json(['message' => 'Subject deleted.']);
     }
 
     private function perPage(Request $request): int
     {
-        return min(max($request->integer('per_page', 25), 1), 100);
+        return min(max($request->integer('per_page', 15), 1), 100);
     }
 }

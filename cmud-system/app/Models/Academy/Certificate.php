@@ -11,6 +11,7 @@ class Certificate extends Model
 {
     protected $fillable = [
         'enrollment_id',
+        'student_stage_record_id',
         'certificate_template_id',
         'certificate_number',
         'recipient_name',
@@ -47,6 +48,12 @@ class Certificate extends Model
     public function certificateTemplate(): BelongsTo
     {
         return $this->belongsTo(CertificateTemplate::class);
+    }
+
+    /** @return BelongsTo<StudentStageRecord, $this> */
+    public function studentStageRecord(): BelongsTo
+    {
+        return $this->belongsTo(StudentStageRecord::class);
     }
 
     /** @return HasMany<CertificateReissueRequest, $this> */

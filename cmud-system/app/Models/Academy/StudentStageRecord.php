@@ -55,6 +55,12 @@ class StudentStageRecord extends Model
         return $this->hasMany(ExamRecord::class);
     }
 
+    /** @return HasMany<Certificate, $this> */
+    public function certificates(): HasMany
+    {
+        return $this->hasMany(Certificate::class);
+    }
+
     /** @return HasMany<StudentExpense, $this> */
     public function studentExpenses(): HasMany
     {

@@ -148,11 +148,14 @@ class CoreAcademySeeder extends Seeder
         ] as $subject) {
             $saved = $this->saveRow('subjects', ['code' => $subject['code']], [
                 'name' => $subject['name'],
-                'course_id' => $courses[$subject['course']],
                 'description' => 'Fictional subject for development demonstrations.',
                 'is_active' => true,
             ]);
             $subjects[$subject['code']] = (int) $saved->id;
+            $this->saveRow('course_subject', [
+                'course_id' => $courses[$subject['course']],
+                'subject_id' => $subjects[$subject['code']],
+            ], []);
         }
         foreach ([
             ['subject' => 'DEV-SUBJ-EMERGENCY', 'role' => 'Lead instructor'],

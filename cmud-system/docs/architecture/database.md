@@ -406,11 +406,14 @@ Relationships from this table:
 
 ### Course modules and teacher assignments
 
-`subjects` are course modules: one course has many modules, and each module belongs to one course. Teachers and modules have a many-to-many relationship through `subject_teacher`. Courses have no direct teacher assignment.
+`subjects` are independent reusable modules. Courses assign modules through `course_subject`, stages assign modules through `course_stage_subject`, and teachers assign modules through `subject_teacher`.
 
 ```mermaid
 erDiagram
-    courses ||--o{ subjects : contains
+    courses ||--o{ course_subject : assigns
+    subjects ||--o{ course_subject : reusable_in
+    course_stages ||--o{ course_stage_subject : assigns
+    subjects ||--o{ course_stage_subject : reusable_in
     subjects ||--o{ subject_teacher : assigns
     teachers ||--o{ subject_teacher : teaches
     institutes ||--o{ teachers : employs
@@ -424,7 +427,6 @@ erDiagram
     }
     subjects {
         bigint id PK
-        bigint course_id FK
         string code UK
         string name
     }
@@ -533,10 +535,10 @@ Relationships from this table:
 - `enrollments.course_id` -> `courses.id` (1:N).
 - `certificate_templates.course_id` -> `courses.id` (1:N; optional).
 - `communication_groups.course_id` -> `courses.id` (1:N; optional).
-- `subjects.course_id` -> `courses.id` (1:N; each module belongs to one course).
+- Course-to-module assignments are many-to-many through `course_subject`; modules have no `course_id` column.
 - `student_expense_price_versions.course_id` -> `courses.id` (1:N; optional).
 - `course_price_versions.course_id` -> `courses.id` (1:N).
-- Courses have many subjects; courses have no direct teacher assignment.
+- Courses and subjects have a many-to-many assignment; courses have no direct teacher assignment.
 
 
 
@@ -928,7 +930,6 @@ Table 2.17 — subjects
 | Column | Purpose |
 |---|---|
 | **`id` — PK** | Subject ID |
-| `course_id` | Owning course ID; nullable only for an unassigned module |
 | `code` | Unique subject code |
 | `name` | Subject name |
 | `description` | Subject overview, optional |
@@ -938,26 +939,26 @@ Table 2.17 — subjects
 
 Constraints and relationships
 - `code` must be unique.
-- Each subject belongs to one course through `course_id` (course-to-subject 1:N).
+- Courses may reuse modules through `course_subject`; stages may reuse modules through `course_stage_subject`.
 - A subject can be taught by many teachers through `subject_teacher`.
 
 
-Historical schema, removed by the course-module normalization migration: `course_subject`
+`course_subject`
 | Column | Purpose |
 |---|---|
 | `course_id` | Course receiving the subject; part of the composite primary key |
 | `subject_id` | Subject assigned to the course; part of the composite primary key |
 | `created_at` | Assignment creation time |
 | `updated_at` | Last update time |
-| `PRIMARY KEY (course_id, subject_id)` | Allows each subject to be assigned to a course only once |
+| `PRIMARY KEY (course_id, subject_id)` | Allows each module to be assigned to a course only once |
 
 Foreign keys and relationships
 Foreign keys stored in this table:
-- `course_id` -> `courses.id` (cascade on delete).
-- `subject_id` -> `subjects.id` (cascade on delete).
+- `course_id` -> `courses.id` (restrict on delete).
+- `subject_id` -> `subjects.id` (restrict on delete).
 Relationships from this table:
 - Each course can have many subjects, and each subject can belong to many courses (many-to-many).
-- Deleting a course or subject removes its course-subject assignment rows, not the other linked records.
+- Foreign keys restrict deleting a course or subject while course-subject assignments exist.
 
 
 Table 2.18 â€” subject_teacher

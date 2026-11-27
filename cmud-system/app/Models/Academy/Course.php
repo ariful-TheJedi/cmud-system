@@ -7,6 +7,7 @@ use App\Models\Finance\StudentExpensePriceVersion;
 use App\Models\Institute\Institute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Course extends Model
@@ -71,11 +72,11 @@ class Course extends Model
         return $this->hasMany(CommunicationGroup::class);
     }
 
-    /** A course contains its module records; each subject belongs to at most one course. */
-    /** @return HasMany<Subject, $this> */
-    public function subjects(): HasMany
+    /** Courses may use reusable subjects directly when no stages are configured. */
+    /** @return BelongsToMany<Subject, $this> */
+    public function subjects(): BelongsToMany
     {
-        return $this->hasMany(Subject::class);
+        return $this->belongsToMany(Subject::class, 'course_subject')->withTimestamps();
     }
 
     /** @return HasMany<CoursePriceVersion, $this> */
